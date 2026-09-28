@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DES Project Proposal – Scaling Orchestrators</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 10pt;
+            line-height: 1.45;
+            color: #000;
+            background: #e5e5e5;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 20px auto;
+            padding: 2.5cm;
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        }
+
+        h1.doc-title {
+            font-size: 13pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 4pt;
+            line-height: 1.3;
+        }
+
+        .team-name {
+            text-align: center;
+            font-size: 9.5pt;
+            font-style: italic;
+            color: #333;
+            margin-bottom: 5pt;
+        }
+
+        .authors {
+            text-align: center;
+            font-size: 9.5pt;
+            margin-bottom: 14pt;
+            line-height: 1.7;
+        }
+
+        .authors .email {
+            font-size: 9pt;
+            color: #333;
+            font-style: italic;
+        }
+
+        h2.section {
+            font-size: 10.5pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 1px solid #000;
+            margin-top: 13pt;
+            margin-bottom: 5pt;
+            padding-bottom: 1pt;
+            letter-spacing: 0.04em;
+        }
+
+        h3.sub {
+            font-size: 10pt;
+            font-weight: bold;
+            margin-top: 7pt;
+            margin-bottom: 3pt;
+        }
+
+        p {
+            margin-bottom: 5pt;
+            text-align: justify;
+        }
+
+        ul {
+            margin: 3pt 0 5pt 16pt;
+        }
+
+        ul li {
+            margin-bottom: 2pt;
+        }
+
+        .arch-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4pt;
+            margin: 8pt 0;
+            flex-wrap: nowrap;
+        }
+
+        .arch-box {
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 4pt 7pt;
+            text-align: center;
+            font-size: 8.5pt;
+            line-height: 1.3;
+            background: #f7f7f7;
+            min-width: 72pt;
+        }
+
+        .arch-box strong {
+            display: block;
+            font-size: 8pt;
+        }
+
+        .arch-box span {
+            font-size: 7.5pt;
+            color: #444;
+            font-style: italic;
+        }
+
+        .arch-arrow {
+            font-size: 13pt;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+            margin: 6pt 0;
+        }
+
+        th {
+            background: #f0f0f0;
+            border: 1px solid #aaa;
+            padding: 3pt 6pt;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        td {
+            border: 1px solid #aaa;
+            padding: 3pt 6pt;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) td { background: #fafafa; }
+
+        code {
+            font-family: "Courier New", monospace;
+            font-size: 8.5pt;
+            background: #f3f3f3;
+            padding: 0 2pt;
+            border-radius: 2px;
+        }
+
+        @media print {
+            body { background: none; }
+            .page {
+                margin: 0;
+                box-shadow: none;
+                width: 210mm;
+                min-height: 297mm;
+                padding: 2.5cm;
+            }
+            .no-print { display: none; }
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        .print-bar {
+            text-align: center;
+            padding: 10px;
+            background: #1e293b;
+        }
+
+        .print-bar button {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 8px 22px;
+            font-size: 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .print-bar button:hover { background: #0369a1; }
+    </style>
+</head>
+<body>
+
+<div class="print-bar no-print">
+    <button onclick="window.print()">&#128438; Print / Save as PDF</button>
+    &nbsp;&nbsp;
+    <small style="color:#94a3b8">Browser Print &rarr; Save as PDF &nbsp;|&nbsp; Paper: A4 &nbsp;|&nbsp; Margins: None</small>
+</div>
+
+<div class="page">
+
+    <h1 class="doc-title">
+        Real-Time Network Intrusion Detection using<br>
+        Streaming ML on Apache Kafka and PySpark
+    </h1>
+
+    <div class="team-name">Team: Scaling Orchestrators</div>
+
+    <div class="authors">
+        <strong>Priyanka Kumar</strong> &nbsp;&nbsp;
+        <strong>Aswin S.</strong> &nbsp;&nbsp;
+        <strong>Nitish Yadav</strong> &nbsp;&nbsp;
+        <strong>Vidhi Gupta</strong><br>
+        <span class="email">
+            kumarip@iisc.ac.in &nbsp;&nbsp;
+            saswin@iisc.ac.in &nbsp;&nbsp;
+            nitishyadav@iisc.ac.in &nbsp;&nbsp;
+            vidhigupta@iisc.ac.in
+        </span><br>
+        <span style="font-size:9pt;">Data Engineering at Scale (DES) &nbsp;|&nbsp; Indian Institute of Science &nbsp;|&nbsp; 2026</span>
+    </div>
+
+    <h2 class="section">1. Problem</h2>
+
+    <h3 class="sub">1.1 Definition</h3>
+    <p>
+        Modern networks generate traffic at a scale where manual inspection is simply not possible.
+        Security teams need systems that can watch for attacks such as DDoS floods, TCP SYN storms, and port-scan
+        probes as events are happening, not hours later in a batch report. The core challenge is
+        building a pipeline that ingests raw network log events, computes meaningful traffic features
+        over short time windows, and runs a machine learning model against those features, all within
+        a few hundred milliseconds of the original event arriving.
+    </p>
+
+    <h3 class="sub">1.2 Problem Motivation</h3>
+    <p>
+        Most intrusion detection tools in production today still rely on periodic batch processing or
+        rule-based signature matching. Batch processing simply catches threats too late, since an attacker can saturate a link or exfiltrate data long before a nightly report surfaces the anomaly.
+        Rule-based systems, on the other hand, require someone to write and maintain thresholds for
+        every known attack pattern, and they are blind to anything novel.
+    </p>
+    <p>
+        Unsupervised ML models like Isolation Forest are well-suited to this problem because they
+        learn what normal traffic looks like and flag deviations without needing labelled attack
+        samples. However, most course-level projects that use Spark Streaming either skip the ML
+        component entirely or fake it with if-else rules dressed up as a UDF. Our goal is to
+        build the real thing: an offline-trained Isolation Forest model, serialized and broadcast
+        into a live Spark streaming job, evaluated against actual CIC-IDS2017 network data.
+    </p>
+
+    <h3 class="sub">1.3 Design Goals and Supported Features</h3>
+    <ul>
+        <li><strong>Throughput target:</strong> the pipeline should handle at least 10,000 events per second
+            end-to-end without falling behind the input rate.</li>
+        <li><strong>Detection latency:</strong> from the moment a packet event enters Kafka, an anomaly
+            alert should be written to storage within 500 ms (p95).</li>
+        <li><strong>Genuine ML inference:</strong> a scikit-learn Isolation Forest model, trained offline
+            on CIC-IDS2017, is broadcast to Spark workers and called via a vectorized
+            <code>pandas_udf</code>. No hardcoded thresholds in the scoring path.</li>
+        <li><strong>Hybrid detection:</strong> a lightweight rule check runs first for well-known
+            attack signatures; the ML model runs in parallel to catch patterns the rules miss.
+            Both labels are stored separately so we can compare them.</li>
+        <li><strong>Scalability measurement:</strong> we vary Kafka partition count and Spark executor
+            count independently to show how the system scales and where bottlenecks appear.</li>
+        <li><strong>Live monitoring dashboard:</strong> a Streamlit UI shows current throughput,
+            anomaly rate, and fires a retraining alert if more than 15% of recent windows are flagged.</li>
+    </ul>
+
+    <h2 class="section">2. Approach</h2>
+
+    <h3 class="sub">2.1 High-Level Design</h3>
+
+    <div class="arch-row">
+        <div class="arch-box">
+            <strong>Log Producer</strong>
+            <span>CIC-IDS2017 replay<br>+ attack injector</span>
+        </div>
+        <div class="arch-arrow">&#9658;</div>
+        <div class="arch-box">
+            <strong>Apache Kafka</strong>
+            <span>Topic partitioning<br>1 to 16 partitions</span>
+        </div>
+        <div class="arch-arrow">&#9658;</div>
+        <div class="arch-box">
+            <strong>PySpark Streaming</strong>
+            <span>30 s windows<br>+ ML inference</span>
+        </div>
+        <div class="arch-arrow">&#9658;</div>
+        <div class="arch-box">
+            <strong>Apache Cassandra</strong>
+            <span>Time-series<br>anomaly sink</span>
+        </div>
+        <div class="arch-arrow">&#9658;</div>
+        <div class="arch-box">
+            <strong>Streamlit</strong>
+            <span>Live dashboard<br>+ drift monitor</span>
+        </div>
+    </div>
+
+    <p>
+        A Python Kafka producer reads CIC-IDS2017 flow records and re-emits them as JSON events at
+        a configurable rate. It also supports an attack injection flag so we can trigger DDoS bursts
+        or port-scan sequences on demand during testing. On the processing side, a PySpark Structured
+        Streaming job subscribes to the Kafka topic, groups events into 30-second sliding windows
+        (with a 10-second slide step), and computes four aggregated features per source IP per window.
+        Those feature rows are scored by the broadcast Isolation Forest model using a
+        <code>pandas_udf</code>, which applies the model to an entire batch at once rather than
+        row by row. The resulting records, including both the ML score and the rule-based flag,
+        are written to Cassandra. A Streamlit dashboard polls Cassandra every few seconds and
+        renders live charts for the operations view.
+    </p>
+
+    <h3 class="sub">2.2 Big Data Platforms Used</h3>
+    <ul>
+        <li><strong>Apache Kafka</strong> – message broker with configurable partitioning for the scalability experiments.</li>
+        <li><strong>Apache Spark / PySpark</strong> – Structured Streaming with 30 s windows, MLlib pipeline, and <code>pandas_udf</code> for vectorized ML scoring.</li>
+        <li><strong>Apache Cassandra</strong> – wide-column NoSQL store with a time-series schema; partitioned by date bucket to avoid write hotspots, using the Spark-Cassandra-Connector as the sink.</li>
+        <li><strong>Docker Compose</strong> – runs the full cluster (Kafka, Zookeeper, Spark, Cassandra) on a single machine for development and benchmarking.</li>
+        <li><strong>scikit-learn on Google Colab</strong> – used for the one-time offline training of the Isolation Forest model on CIC-IDS2017 data.</li>
+    </ul>
+
+    <h3 class="sub">2.3 Data Sources and Data Models</h3>
+    <p>
+        We use the <strong>CIC-IDS2017</strong> dataset published by the Canadian Institute for
+        Cybersecurity. It contains roughly 2 GB of pre-computed network flow feature files in CSV
+        format, spanning a full week of traffic with labelled examples of DDoS, DoS, Port Scan,
+        Brute Force, Web Attack, and Infiltration. The producer reads these files and replays the
+        flow records as streaming JSON events.
+    </p>
+    <p>
+        Each Kafka event carries these fields: <code>timestamp, src_ip, dst_ip, dst_port, bytes_sent,
+        syn_flag, ack_flag</code>. The Spark job groups events over a 30-second window and computes
+        four features per group: <code>total_bytes</code>, <code>unique_ports</code>,
+        <code>syn_ack_ratio</code>, and <code>packet_rate</code>. These four values form the
+        feature vector that the Isolation Forest scores.
+    </p>
+    <p>
+        Each Cassandra record stores: <code>date_bucket</code> (partition key, e.g. "2026-11-01"),
+        <code>detected_at</code> and <code>src_ip</code> (clustering keys, ordered by most recent
+        first), plus <code>anomaly_score</code>, <code>rule_flag</code>, and <code>is_anomaly</code>.
+    </p>
+
+    <h2 class="section">3. Evaluation Approach</h2>
+
+    <h3 class="sub">3.1 Experiment Plan</h3>
+    <p>
+        All benchmarks run locally on a MacBook Pro (M-series, 16 GB RAM) using Docker Compose.
+        We run three experiments, each varying one dimension at a time while holding the rest fixed.
+        Every run lasts 10 minutes and we sample throughput and latency every 30 seconds.
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Experiment</th>
+                <th>What We Vary</th>
+                <th>Values</th>
+                <th>Held Fixed</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>E1 – Kafka Partitions</td>
+                <td>Number of topic partitions</td>
+                <td>1, 4, 8, 16</td>
+                <td>2 Spark executors, 5,000 events/s</td>
+            </tr>
+            <tr>
+                <td>E2 – Spark Parallelism</td>
+                <td>Number of Spark executors</td>
+                <td>1, 2, 4</td>
+                <td>8 partitions, 5,000 events/s</td>
+            </tr>
+            <tr>
+                <td>E3 – Attack Injection</td>
+                <td>Share of malicious events</td>
+                <td>0%, 5%, 20%</td>
+                <td>8 partitions, 2 executors</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>
+        Throughput is measured from Spark's streaming query listener. End-to-end latency is measured
+        as the difference between the event timestamp in the Kafka message and the
+        <code>detected_at</code> timestamp written to Cassandra. Attack injection is controlled
+        through a command-line flag on the producer.
+    </p>
+
+    <h3 class="sub">3.2 Performance Metrics for Success</h3>
+    <ul>
+        <li>The pipeline sustains at least 10,000 events/second in experiment E1 with 16 partitions.</li>
+        <li>p95 end-to-end latency stays below 500 ms at an input rate of 5,000 events/second.</li>
+        <li>Going from 1 to 4 Kafka partitions produces at least a 1.5x improvement in throughput,
+            confirming that partition count is a meaningful scaling lever.</li>
+        <li>After a simulated Spark worker restart, the pipeline recovers and resumes processing
+            within 30 seconds using Spark checkpointing.</li>
+    </ul>
+
+    <h3 class="sub">3.3 Feature Metrics for Success</h3>
+    <ul>
+        <li>The Isolation Forest model achieves precision of at least 0.80 and recall of at least 0.75
+            on the held-out test portion of CIC-IDS2017 (Friday DDoS and Thursday Port Scan files).</li>
+        <li>On a clean benign-only traffic run, fewer than 5% of windows are incorrectly flagged
+            as anomalies (false positive rate).</li>
+        <li>We produce a side-by-side comparison of rule-only detection versus hybrid (rule + ML)
+            detection across each attack category in the dataset.</li>
+        <li>Anomaly alerts appear in the Streamlit dashboard within 5 seconds of being written
+            to Cassandra during a normal-load run.</li>
+        <li>The drift alert banner in the dashboard triggers correctly when attack injection is
+            raised to a level that pushes the anomaly rate above 15%.</li>
+    </ul>
+
+    <h2 class="section">4. Timeline and Milestones (8 Weeks)</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width:10%">Week</th>
+                <th style="width:50%">Tasks</th>
+                <th style="width:40%">Milestone</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>1 – 2</strong></td>
+                <td>
+                    Stand up the Docker Compose cluster with Kafka, Zookeeper, Spark, and Cassandra.
+                    Download and explore the CIC-IDS2017 CSVs. Agree on the shared JSON event schema
+                    that all four team members will build against.
+                </td>
+                <td>All services running; producer can push 1,000 events/s into the Kafka topic without errors.</td>
+            </tr>
+            <tr>
+                <td><strong>3</strong></td>
+                <td>
+                    Build the Python Kafka producer that replays CIC-IDS2017 at a configurable rate
+                    and supports toggles for DDoS, SYN Flood, and Port Scan injection.
+                </td>
+                <td>Producer sustains over 5,000 events/s; injected attack bursts show up clearly in a console consumer.</td>
+            </tr>
+            <tr>
+                <td><strong>4</strong></td>
+                <td>
+                    Train the Isolation Forest on Google Colab using CIC-IDS2017 flow features.
+                    Carefully align the training feature columns to match what Spark will compute
+                    at runtime. Serialize the trained model and scaler using <code>joblib</code>.
+                </td>
+                <td>
+                    <code>isolation_forest.joblib</code> saved to the shared repo.
+                    Offline evaluation shows precision / recall above 0.80 / 0.75 on the held-out split.
+                </td>
+            </tr>
+            <tr>
+                <td><strong>5 – 6</strong></td>
+                <td>
+                    Write the PySpark Structured Streaming job: 30 s sliding windows, four feature
+                    aggregates, broadcast model scoring via <code>pandas_udf</code>, and hybrid
+                    rule annotation. Set watermark to 1 minute to handle late-arriving events.
+                </td>
+                <td>End-to-end flow works: events from Kafka are scored and anomaly records appear in Cassandra.</td>
+            </tr>
+            <tr>
+                <td><strong>7</strong></td>
+                <td>
+                    Build the Streamlit dashboard with a live throughput chart, anomaly rate gauge,
+                    top-10 flagged IPs table, and drift alert banner. Query Cassandra using the
+                    Python <code>cassandra-driver</code>.
+                </td>
+                <td>Dashboard refreshes every 3 seconds; drift alert fires correctly on an all-attack load test.</td>
+            </tr>
+            <tr>
+                <td><strong>8</strong></td>
+                <td>
+                    Run the three benchmark experiments (E1, E2, E3) and record results.
+                    Write the final technical report and prepare the demo script and slides.
+                </td>
+                <td>
+                    Report submitted by 15 Nov 2026. Live demo ready by 29 Nov 2026.
+                    Benchmarks confirm at least 1.5x throughput gain from 1 to 4 Kafka partitions.
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+</div>
+
+</body>
+</html>
