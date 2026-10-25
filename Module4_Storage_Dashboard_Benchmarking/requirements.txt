@@ -1,0 +1,8 @@
+# Module 4 host dependencies (pins from contracts/versions.md)
+-e ../contracts/python
+cassandra-driver==3.29.2
+streamlit==1.39.0
+pandas==2.2.3
+pytest>=8.3,<9
+matplotlib==3.9.2
+pyparsing==3.1.4

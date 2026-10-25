@@ -1,0 +1,30 @@
+# Data and large artifacts (scripts that produce them ARE committed)
+data/
+*.csv
+!contracts/fixtures/*.csv
+*.parquet
+!Module1_Data_Ingestion_Platform/mocks/replay_sample.parquet
+*.joblib
+!**/mocks/dummy_bundle/*.joblib
+checkpoints/
+**/results/raw/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Env / OS
+.env
+.DS_Store
+
+# Local runtime (data, model bundles, checkpoints)
+runtime/
+*.egg-info/
+
+# Benchmark smoke outputs and run logs (the full analysed results are committed later, deliberately)
+**/results/smoke/
+**/results/*.log
+**/results/raw/

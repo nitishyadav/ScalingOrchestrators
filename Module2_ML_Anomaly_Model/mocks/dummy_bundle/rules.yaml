@@ -1,0 +1,22 @@
+# C-03 §4 rules (placeholders; M2 tunes them)
+version: 1
+combine: any
+rules:
+- id: R-SYN-FLOOD
+  all:
+  - feature: syn_ack_ratio
+    op: '>='
+    value: 5.0
+- id: R-PORT-SCAN
+  all:
+  - feature: unique_ports
+    op: '>='
+    value: 50
+- id: R-DDOS-RATE
+  all:
+  - feature: packet_rate
+    op: '>='
+    value: 100.0
+  - feature: unique_ports
+    op: <=
+    value: 3

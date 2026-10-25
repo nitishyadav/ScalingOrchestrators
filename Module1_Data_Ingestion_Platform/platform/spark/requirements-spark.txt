@@ -1,0 +1,7 @@
+# Python stack inside the Spark image (driver = executors). Must equal contracts/versions.md (ADR-009).
+scikit-learn==1.5.2
+numpy==1.26.4
+pandas==2.2.3
+pyarrow==17.0.0
+joblib==1.4.2
+pyyaml==6.0.2

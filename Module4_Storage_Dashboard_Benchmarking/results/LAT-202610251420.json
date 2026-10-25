@@ -1,0 +1,195 @@
+{
+  "experiment": "LAT",
+  "target": "P2: p95 end-to-end latency < 500 ms at 5,000 ev/s (D-01 definition), D-13",
+  "duration_s": 600,
+  "warmup_s": 60.0,
+  "runs": [
+    {
+      "run_id": "LAT-p8-e2-r5000-a0-t1000-202610251420",
+      "spec": {
+        "experiment": "LAT",
+        "level": "1000",
+        "partitions": 8,
+        "executors": 2,
+        "rate": 5000,
+        "share": 0.0,
+        "trigger": "1 second",
+        "restart_at": null
+      },
+      "duration_s": 600,
+      "warmup_s": 60.0,
+      "status": "ok",
+      "times_ms": {
+        "job_start": 1792938057559,
+        "producer_start": 1792938153318,
+        "producer_end": 1792938768266
+      },
+      "producer": {
+        "status": "ok",
+        "command": "producer",
+        "run_id": "LAT-p8-e2-r5000-a0-t1000-202610251420",
+        "source": "replay",
+        "produced": 3000000,
+        "sent": 3000000,
+        "failed": 0,
+        "invalid": 0,
+        "injected": 0,
+        "target_rate": 5000,
+        "achieved_rate": 4905.5,
+        "rate_p05": 2610,
+        "rate_p50": 5000,
+        "rate_p95": 7203,
+        "loops": 5,
+        "exhausted": false,
+        "partitions": 8,
+        "duration_s": 611.55,
+        "attack_mode": "none",
+        "attack_share": 0.0,
+        "achieved_share": 0.0,
+        "injected_by_type": {},
+        "seed": 42,
+        "attack_window_s": null
+      },
+      "job": {
+        "status": "ok",
+        "command": "stream job",
+        "run_id": "LAT-p8-e2-r5000-a0-t1000-202610251420",
+        "batches": 10,
+        "rows_written": 286939,
+        "anomalies_written": 4887,
+        "metrics_rows": 10,
+        "malformed": 0,
+        "input_rows": 3214567,
+        "bundle_version": "1.1.0-replica"
+      },
+      "summary": {
+        "batches": 10,
+        "input_batches": 8,
+        "steady_batches": 6,
+        "input_rows": 3214567,
+        "sustained_evs": 5561.236335075455,
+        "capacity_rows_per_s": 5774.879196015096,
+        "latency_p95_ms": 115167.5,
+        "latency_p95_worst_ms": 144309.0,
+        "batch_duration_ms": 81314.0,
+        "backlog_s": 1.751,
+        "keeping_up": true
+      }
+    },
+    {
+      "run_id": "LAT-p8-e2-r5000-a0-t500-202610251433",
+      "spec": {
+        "experiment": "LAT",
+        "level": "500",
+        "partitions": 8,
+        "executors": 2,
+        "rate": 5000,
+        "share": 0.0,
+        "trigger": "500 milliseconds",
+        "restart_at": null
+      },
+      "duration_s": 600,
+      "warmup_s": 60.0,
+      "status": "failed",
+      "error": "producer still running 720 s after start",
+      "times_ms": {
+        "job_start": 1792938830656,
+        "producer_start": 1792938917313,
+        "producer_end": 1792940981158
+      },
+      "producer": {
+        "status": "error",
+        "command": "producer",
+        "run_id": "LAT-p8-e2-r5000-a0-t500-202610251433",
+        "source": "replay",
+        "produced": 1359782,
+        "sent": 1349413,
+        "failed": 10369,
+        "invalid": 0,
+        "injected": 0,
+        "target_rate": 5000,
+        "achieved_rate": 4367.8,
+        "rate_p05": 0,
+        "rate_p50": 4998,
+        "rate_p95": 6351,
+        "loops": 2,
+        "exhausted": false,
+        "partitions": 8,
+        "duration_s": 308.94,
+        "attack_mode": "none",
+        "attack_share": 0.0,
+        "achieved_share": 0.0,
+        "injected_by_type": {},
+        "seed": 42,
+        "attack_window_s": null
+      },
+      "job": {
+        "status": "ok",
+        "command": "stream job",
+        "run_id": "LAT-p8-e2-r5000-a0-t500-202610251433",
+        "batches": 3,
+        "rows_written": 55307,
+        "anomalies_written": 893,
+        "metrics_rows": 3,
+        "malformed": 0,
+        "input_rows": 599972,
+        "bundle_version": "1.1.0-replica"
+      },
+      "summary": {
+        "batches": 3,
+        "input_batches": 2,
+        "steady_batches": 1,
+        "input_rows": 599972,
+        "sustained_evs": 6893.615065549849,
+        "capacity_rows_per_s": 4517.321985135459,
+        "latency_p95_ms": 103745.0,
+        "latency_p95_worst_ms": 103745.0,
+        "batch_duration_ms": 116788.0,
+        "backlog_s": 0.0,
+        "keeping_up": true
+      }
+    },
+    {
+      "run_id": "LAT-p8-e2-r5000-a0-t250-202610251509",
+      "spec": {
+        "experiment": "LAT",
+        "level": "250",
+        "partitions": 8,
+        "executors": 2,
+        "rate": 5000,
+        "share": 0.0,
+        "trigger": "250 milliseconds",
+        "restart_at": null
+      },
+      "duration_s": 600,
+      "warmup_s": 60.0,
+      "status": "failed",
+      "error": "stream job did not register within 180 s",
+      "times_ms": {
+        "job_start": 1792940982276,
+        "producer_end": 1792941271144
+      },
+      "job": {
+        "status": "ok",
+        "command": "stream job",
+        "run_id": "LAT-p8-e2-r5000-a0-t250-202610251509",
+        "batches": 0,
+        "rows_written": 0,
+        "anomalies_written": 0,
+        "metrics_rows": 0,
+        "malformed": 0,
+        "input_rows": 0,
+        "bundle_version": "1.1.0-replica"
+      }
+    }
+  ],
+  "checks": {
+    "p95_t1000ms": {
+      "value": 115167.5,
+      "target": 500,
+      "pass": false
+    }
+  },
+  "interrupted": false,
+  "report_stem": "LAT-202610251420"
+}

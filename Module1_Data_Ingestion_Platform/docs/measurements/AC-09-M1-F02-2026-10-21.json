@@ -1,0 +1,14 @@
+{
+  "test": "M1-F02-AC-09",
+  "date": "2026-10-21T23:45:47",
+  "rows": 2830743,
+  "elapsed_s": 27.2,
+  "peak_rss_mb": 141.5,
+  "replay_size_mb": 34.3,
+  "targets": {
+    "elapsed_s": 300,
+    "peak_rss_mb": 2048,
+    "replay_size_mb": 300
+  },
+  "pass": true
+}

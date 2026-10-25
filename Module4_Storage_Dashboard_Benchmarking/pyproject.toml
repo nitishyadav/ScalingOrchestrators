@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ids-monitor"
+version = "0.1.0"
+description = "Module 4 (REPLICA by M1): Cassandra schema/access, dashboard, benchmark harness"
+requires-python = ">=3.11"
+dependencies = ["ids-contracts", "cassandra-driver==3.29.2", "streamlit==1.39.0", "pandas==2.2.3"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["docker: needs the running platform (Cassandra on localhost:9042)"]

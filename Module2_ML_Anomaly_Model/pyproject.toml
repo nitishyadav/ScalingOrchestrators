@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ids-model"
+version = "0.1.0"
+description = "Module 2 (REPLICA by M1): reference features (C-02) and detection bundle (C-03)"
+requires-python = ">=3.10"
+dependencies = ["ids-contracts", "numpy==1.26.4", "pandas==2.2.3", "pyarrow==17.0.0", "scikit-learn==1.5.2",
+                "joblib==1.4.2", "pyyaml==6.0.2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["docker: needs the running platform (spark-client container)", "data: needs the real replay dataset"]

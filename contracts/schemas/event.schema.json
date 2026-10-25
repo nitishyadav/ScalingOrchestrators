@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scaling-orchestrators.local/contracts/C-01/event.schema.json",
+  "title": "C-01 Network Event",
+  "description": "One network event on Kafka topic network-events. Contract C-01 v1.0.0-rc.1. label and is_injected are eval-only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "timestamp", "src_ip", "dst_ip", "dst_port", "bytes_sent", "syn_flag", "ack_flag"],
+  "properties": {
+    "event_id":   {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "timestamp":  {"type": "integer", "minimum": 1000000000000, "description": "Emission time, epoch milliseconds UTC"},
+    "src_ip":     {"type": "string", "anyOf": [{"format": "ipv4"}, {"format": "ipv6"}]},
+    "dst_ip":     {"type": "string", "anyOf": [{"format": "ipv4"}, {"format": "ipv6"}]},
+    "dst_port":   {"type": "integer", "minimum": 0, "maximum": 65535},
+    "bytes_sent": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "syn_flag":   {"type": "integer", "minimum": 0},
+    "ack_flag":   {"type": "integer", "minimum": 0},
+    "orig_ts":    {"type": ["string", "null"]},
+    "label": {
+      "type": "string",
+      "enum": [
+        "BENIGN", "DDoS", "PortScan", "Bot", "Infiltration", "Heartbleed",
+        "DoS Hulk", "DoS GoldenEye", "DoS slowloris", "DoS Slowhttptest",
+        "FTP-Patator", "SSH-Patator",
+        "Web Attack - Brute Force", "Web Attack - XSS", "Web Attack - Sql Injection",
+        "INJ_DDOS", "INJ_SYNFLOOD", "INJ_PORTSCAN"
+      ]
+    },
+    "is_injected": {"type": "boolean"}
+  },
+  "if": {"properties": {"is_injected": {"const": true}}, "required": ["is_injected"]},
+  "then": {"required": ["label"], "properties": {"label": {"pattern": "^INJ_"}}}
+}

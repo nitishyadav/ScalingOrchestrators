@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scaling-orchestrators.local/contracts/C-03/rules.schema.json",
+  "title": "C-03 Detection Bundle rules.yaml (parsed) \u2014 PROVISIONAL REPLICA 0.2.0-replica",
+  "type": "object",
+  "required": [
+    "version",
+    "combine",
+    "rules"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "combine": {
+      "enum": [
+        "any",
+        "all"
+      ]
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "all"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "all": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "feature",
+                "op",
+                "value"
+              ],
+              "properties": {
+                "feature": {
+                  "enum": [
+                    "total_bytes",
+                    "unique_ports",
+                    "syn_ack_ratio",
+                    "packet_rate",
+                    "bytes_per_flow",
+                    "port_ratio",
+                    "syn_share"
+                  ]
+                },
+                "op": {
+                  "enum": [
+                    ">=",
+                    ">",
+                    "<=",
+                    "<",
+                    "=="
+                  ]
+                },
+                "value": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

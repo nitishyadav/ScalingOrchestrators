@@ -1,0 +1,14 @@
+{
+  "test": "M1-F01-AC-10",
+  "date": "2026-10-21T20:29:23",
+  "host": "macOS-27.0.1-arm64-arm-64bit",
+  "partitions": 16,
+  "record_bytes": 300,
+  "compression": "none (identical payloads would otherwise compress away and inflate the rate)",
+  "duration_s": 60.0,
+  "delivered": 48089653,
+  "errors": 0,
+  "rate_msgs_per_s": 801325,
+  "target": 15000,
+  "pass": true
+}

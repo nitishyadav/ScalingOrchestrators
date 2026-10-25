@@ -1,0 +1,24 @@
+{
+  "test": "M1-F04-AC-08",
+  "date": "2026-10-22T00:14:27",
+  "partitions": 16,
+  "attack": {
+    "mode": "mixed",
+    "share": 0.2
+  },
+  "measured": {
+    "sent": 720000,
+    "failed": 0,
+    "injected": 144000,
+    "achieved_share": 0.2,
+    "achieved_rate": 11999.6,
+    "rate_p05": 11977,
+    "rate_p50": 12000,
+    "duration_s": 60.0
+  },
+  "target": {
+    "achieved_rate_min": 11760,
+    "failed": 0
+  },
+  "pass": true
+}
