@@ -1,0 +1,7 @@
+# Module 3 host dependencies (PySpark runs inside the Spark image only — ADR-009)
+-e ../contracts/python
+pyyaml==6.0.2
+pytest>=8.3,<9
+# integration tests only (read Cassandra / produce to Kafka from the host)
+cassandra-driver==3.29.2
+confluent-kafka==2.6.1

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ids-ingest"
+version = "0.2.0"
+description = "Module 1: platform cluster, dataset preparation, replay producer, attack injector"
+requires-python = ">=3.11"
+# ids-contracts is installed from ../contracts/python (see requirements.txt / make install)
+dependencies = ["ids-contracts", "confluent-kafka==2.6.1", "pyyaml==6.0.2", "pyarrow==17.0.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9", "jsonschema>=4.23,<5"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "docker: needs a running Docker engine and starts/uses the platform",
+    "perf: performance measurement (slow)",
+    "data: needs the real CIC-IDS2017 raw files in runtime/data/raw/TrafficLabelling (slow)",
+]

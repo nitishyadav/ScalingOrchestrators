@@ -1,0 +1,259 @@
+{
+  "feature": "M2-F03 (replica)",
+  "bundle_version": "1.0.0-replica",
+  "date": "2026-10-22T01:25:19",
+  "protocol": {
+    "train": "Monday rows < 80 %",
+    "holdout": "Monday rows \u2265 80 %",
+    "validation": [
+      "Tuesday",
+      "Wednesday",
+      "Thursday"
+    ],
+    "test": [
+      "Friday-WorkingHours-Afternoon-DDos",
+      "Friday-WorkingHours-Afternoon-PortScan"
+    ],
+    "R_ref": 5000,
+    "seed": 42
+  },
+  "counts": {
+    "train": 37939,
+    "holdout": 17845,
+    "validation": 119536,
+    "test": 21279,
+    "test_attack": 17
+  },
+  "selection": {
+    "percentile": 99.5,
+    "threshold": 0.7488136298075616,
+    "val_f1": 0.04222873900293256,
+    "val_precision": 0.02158273381294964,
+    "val_recall": 0.972972972972973,
+    "holdout_fpr": 0.012104230876996358,
+    "fpr_constraint_met": true,
+    "candidates": [
+      {
+        "percentile": 90,
+        "threshold": 0.553288644209821,
+        "val_f1": 0.0074823053589484325,
+        "val_precision": 0.003755201461483812,
+        "val_recall": 1.0,
+        "holdout_fpr": 0.05374054356962735
+      },
+      {
+        "percentile": 95,
+        "threshold": 0.5999984050887593,
+        "val_f1": 0.01591055686949043,
+        "val_precision": 0.008019072388383182,
+        "val_recall": 1.0,
+        "holdout_fpr": 0.02650602409638554
+      },
+      {
+        "percentile": 97,
+        "threshold": 0.6367679711644361,
+        "val_f1": 0.0265900107797341,
+        "val_precision": 0.013474144209759651,
+        "val_recall": 1.0,
+        "holdout_fpr": 0.015298402913981508
+      },
+      {
+        "percentile": 98,
+        "threshold": 0.661608501839986,
+        "val_f1": 0.033566433566433566,
+        "val_precision": 0.017077798861480076,
+        "val_recall": 0.972972972972973,
+        "holdout_fpr": 0.0133370692070608
+      },
+      {
+        "percentile": 99,
+        "threshold": 0.7072209152838699,
+        "val_f1": 0.0411663807890223,
+        "val_precision": 0.02102803738317757,
+        "val_recall": 0.972972972972973,
+        "holdout_fpr": 0.01272065004202858
+      },
+      {
+        "percentile": 99.5,
+        "threshold": 0.7488136298075616,
+        "val_f1": 0.04222873900293256,
+        "val_precision": 0.02158273381294964,
+        "val_recall": 0.972972972972973,
+        "holdout_fpr": 0.012104230876996358
+      },
+      {
+        "percentile": 99.9,
+        "threshold": 0.7848300666718343,
+        "val_f1": 0.03824362606232294,
+        "val_precision": 0.019636363636363636,
+        "val_recall": 0.7297297297297297,
+        "holdout_fpr": 0.010030820958251611
+      }
+    ]
+  },
+  "test": {
+    "rule": {
+      "tp": 16,
+      "fp": 122,
+      "tn": 21140,
+      "fn": 1,
+      "precision": 0.11594202898550725,
+      "recall": 0.9411764705882353,
+      "f1": 0.2064516129032258,
+      "fpr": 0.005737936224249836
+    },
+    "ml": {
+      "tp": 16,
+      "fp": 156,
+      "tn": 21106,
+      "fn": 1,
+      "precision": 0.09302325581395349,
+      "recall": 0.9411764705882353,
+      "f1": 0.16931216931216933,
+      "fpr": 0.007337033204778478
+    },
+    "hybrid": {
+      "tp": 16,
+      "fp": 260,
+      "tn": 21002,
+      "fn": 1,
+      "precision": 0.057971014492753624,
+      "recall": 0.9411764705882353,
+      "f1": 0.10921501706484642,
+      "fpr": 0.012228388674630797
+    }
+  },
+  "test_per_file": {
+    "Friday-WorkingHours-Afternoon-DDos": {
+      "rule": {
+        "tp": 9,
+        "fp": 28,
+        "tn": 7286,
+        "fn": 0,
+        "precision": 0.24324324324324326,
+        "recall": 1.0,
+        "f1": 0.391304347826087,
+        "fpr": 0.0038282745419742957
+      },
+      "ml": {
+        "tp": 9,
+        "fp": 63,
+        "tn": 7251,
+        "fn": 0,
+        "precision": 0.125,
+        "recall": 1.0,
+        "f1": 0.2222222222222222,
+        "fpr": 0.008613617719442166
+      },
+      "hybrid": {
+        "tp": 9,
+        "fp": 86,
+        "tn": 7228,
+        "fn": 0,
+        "precision": 0.09473684210526316,
+        "recall": 1.0,
+        "f1": 0.17307692307692307,
+        "fpr": 0.01175827180749248
+      }
+    },
+    "Friday-WorkingHours-Afternoon-PortScan": {
+      "rule": {
+        "tp": 7,
+        "fp": 94,
+        "tn": 13854,
+        "fn": 1,
+        "precision": 0.06930693069306931,
+        "recall": 0.875,
+        "f1": 0.12844036697247707,
+        "fpr": 0.006739317464869515
+      },
+      "ml": {
+        "tp": 7,
+        "fp": 93,
+        "tn": 13855,
+        "fn": 1,
+        "precision": 0.07,
+        "recall": 0.875,
+        "f1": 0.12962962962962962,
+        "fpr": 0.006667622598221967
+      },
+      "hybrid": {
+        "tp": 7,
+        "fp": 174,
+        "tn": 13774,
+        "fn": 1,
+        "precision": 0.03867403314917127,
+        "recall": 0.875,
+        "f1": 0.07407407407407407,
+        "fpr": 0.012474906796673358
+      }
+    }
+  },
+  "per_category": {
+    "DDoS": {
+      "windows": 9,
+      "rule": 1.0,
+      "ml": 1.0,
+      "hybrid": 1.0
+    },
+    "PortScan": {
+      "windows": 8,
+      "rule": 0.875,
+      "ml": 0.875,
+      "hybrid": 0.875
+    }
+  },
+  "holdout": {
+    "rule": {
+      "tp": 0,
+      "fp": 179,
+      "tn": 17666,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fpr": 0.010030820958251611
+    },
+    "ml": {
+      "tp": 0,
+      "fp": 58,
+      "tn": 17787,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fpr": 0.00325021014289717
+    },
+    "hybrid": {
+      "tp": 0,
+      "fp": 216,
+      "tn": 17629,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fpr": 0.012104230876996358
+    }
+  },
+  "targets": {
+    "F1_precision": {
+      "target": 0.8,
+      "value": 0.057971014492753624,
+      "pass": false
+    },
+    "F1_recall": {
+      "target": 0.75,
+      "value": 0.9411764705882353,
+      "pass": true
+    },
+    "F2_fpr": {
+      "target": 0.05,
+      "value": 0.012104230876996358,
+      "pass": true
+    }
+  },
+  "timing_s": {
+    "features": 2.0,
+    "total": 3.5
+  }
+}

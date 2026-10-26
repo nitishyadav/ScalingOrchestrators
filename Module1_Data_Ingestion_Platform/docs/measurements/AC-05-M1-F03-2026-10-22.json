@@ -1,0 +1,27 @@
+{
+  "test": "M1-F03-AC-05",
+  "date": "2026-10-22T00:02:12",
+  "partitions": 16,
+  "at_12000": {
+    "sent": 720000,
+    "failed": 0,
+    "achieved_rate": 11999.6,
+    "rate_p05": 11973,
+    "rate_p50": 12002,
+    "rate_p95": 12030,
+    "duration_s": 60.0
+  },
+  "ceiling_rate_100000": {
+    "sent": 2000000,
+    "failed": 0,
+    "achieved_rate": 99987.1,
+    "rate_p05": 98857,
+    "rate_p50": 99982,
+    "duration_s": 20.0
+  },
+  "target": {
+    "achieved_rate_min": 11760,
+    "failed": 0
+  },
+  "pass": true
+}

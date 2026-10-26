@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ids-stream"
+version = "0.1.0"
+description = "Module 3 (REPLICA by M1): Spark Structured Streaming job — windows, hybrid scoring, Cassandra sink"
+requires-python = ">=3.10"
+# PySpark itself runs only in the platform's Spark image (ADR-009); the host side needs only these.
+dependencies = ["ids-contracts", "pyyaml==6.0.2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9", "cassandra-driver==3.29.2", "confluent-kafka==2.6.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["docker: needs the running platform (spark-client, Kafka, Cassandra)"]

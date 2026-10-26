@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scaling-orchestrators.local/contracts/C-03/manifest.schema.json",
+  "title": "C-03 Detection Bundle manifest.json (PROVISIONAL REPLICA 0.2.0-replica)",
+  "type": "object",
+  "required": [
+    "bundle_version",
+    "created_at",
+    "python_version",
+    "sklearn_version",
+    "numpy_version",
+    "feature_order",
+    "score_definition",
+    "threshold",
+    "training",
+    "metrics",
+    "contract_versions"
+  ],
+  "properties": {
+    "bundle_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "python_version": {
+      "type": "string"
+    },
+    "sklearn_version": {
+      "type": "string"
+    },
+    "numpy_version": {
+      "type": "string"
+    },
+    "feature_order": {
+      "const": [
+        "bytes_per_flow",
+        "port_ratio",
+        "syn_ack_ratio",
+        "syn_share"
+      ]
+    },
+    "score_definition": {
+      "const": "anomaly_score = -model.score_samples(X); higher = more anomalous"
+    },
+    "threshold": {
+      "type": "number"
+    },
+    "training": {
+      "type": "object",
+      "required": [
+        "data",
+        "seed",
+        "n_estimators",
+        "contamination",
+        "R_ref"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "precision",
+        "recall",
+        "fpr",
+        "test_files"
+      ],
+      "properties": {
+        "precision": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recall": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fpr": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "contract_versions": {
+      "type": "object",
+      "required": [
+        "C-02",
+        "C-03"
+      ]
+    }
+  }
+}

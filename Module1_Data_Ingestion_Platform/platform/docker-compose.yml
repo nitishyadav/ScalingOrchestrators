@@ -1,0 +1,137 @@
+# M1-F01 Platform cluster — services, ports and names are fixed by contract C-06 §4.
+# Start/stop through `python -m ids_ingest.platform` (it sets IDS_HOST_ROOT and the worker count).
+# Memory budget (plan §4.4): 1.25 + 0.5 + 2×2.25 + 1.25 + 2.0 = 9.5 GiB (Colima '10 GB' reports 9.69 GiB).
+name: ids
+
+x-spark: &spark
+  image: ids/spark:3.5.5-m1
+  build:
+    context: ./spark
+  restart: unless-stopped
+
+x-workspace-mounts: &workspace-mounts
+  - "${IDS_HOST_ROOT:?run via python -m ids_ingest.platform}:/workspace:ro"
+  - "${IDS_HOST_ROOT:?run via python -m ids_ingest.platform}/runtime:/workspace/runtime:rw"
+
+services:
+  kafka:
+    image: apache/kafka:3.8.1
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: "ids-kraft-cluster-0001"
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx768m"
+    user: "0"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    mem_limit: 1280m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 15s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  spark-master:
+    <<: *spark
+    hostname: spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master",
+              "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    environment:
+      SPARK_DAEMON_MEMORY: "256m"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/json/', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 10s
+
+  spark-worker:
+    <<: *spark
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077",
+              "--cores", "2", "--memory", "1792m", "--webui-port", "8081"]
+    environment:
+      SPARK_DAEMON_MEMORY: "256m"
+      IDS_ROOT: "/workspace"
+    volumes: *workspace-mounts
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    mem_limit: 2304m
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/json/', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 20
+      start_period: 10s
+
+  spark-client:
+    <<: *spark
+    hostname: spark-client
+    command: ["sleep", "infinity"]
+    environment:
+      IDS_ROOT: "/workspace"
+      KAFKA_BOOTSTRAP: "kafka:29092"
+      CASSANDRA_HOSTS: "cassandra"
+      SPARK_MASTER_URL: "spark://spark-master:7077"
+    volumes:
+      - "${IDS_HOST_ROOT:?run via python -m ids_ingest.platform}:/workspace:ro"
+      - "${IDS_HOST_ROOT:?run via python -m ids_ingest.platform}/runtime:/workspace/runtime:rw"
+      - "./spark/spark-defaults.client.conf:/opt/spark/conf/spark-defaults.conf:ro"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    mem_limit: 1280m
+    healthcheck:
+      test: ["CMD", "test", "-f", "/workspace/CONSTITUTION.md"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  cassandra:
+    image: cassandra:4.1.10
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      MAX_HEAP_SIZE: "1G"
+      HEAP_NEWSIZE: "256M"
+      CASSANDRA_CLUSTER_NAME: "ids"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 15s
+      retries: 18
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  kafka-data:
+  cassandra-data:
+
+networks:
+  default:
+    name: ids-net

@@ -1,0 +1,227 @@
+{
+  "counts": {
+    "train": 37939,
+    "holdout": 17845,
+    "validation": 119536,
+    "test": 21279
+  },
+  "results": {
+    "V0-current": {
+      "features": [
+        "total_bytes",
+        "unique_ports",
+        "syn_ack_ratio",
+        "packet_rate"
+      ],
+      "threshold_percentile": 99.5,
+      "fpr_constraint_met": true,
+      "window": {
+        "ml": {
+          "precision": 0.09302325581395349,
+          "recall": 0.9411764705882353,
+          "f1": 0.16931216931216933,
+          "fpr": 0.007337033204778478
+        },
+        "hybrid": {
+          "precision": 0.057971014492753624,
+          "recall": 0.9411764705882353,
+          "f1": 0.10921501706484642,
+          "fpr": 0.012228388674630797
+        }
+      },
+      "flow": {
+        "ml": {
+          "precision": 0.5987735618677091,
+          "recall": 0.9997281822712114,
+          "f1": 0.7489648438519818,
+          "benign_flow_share_flagged": 0.8533972608821114
+        },
+        "hybrid": {
+          "precision": 0.5949139326641127,
+          "recall": 0.9997281822712114,
+          "f1": 0.7459381875590729,
+          "benign_flow_share_flagged": 0.8671964366310774
+        }
+      },
+      "holdout_benign_flow_share_flagged": 0.7997339221014492,
+      "validation_benign_flow_share_flagged": 0.8794294645699274,
+      "per_category": {
+        "DDoS": {
+          "windows": 9,
+          "rule": 1.0,
+          "ml": 1.0,
+          "hybrid": 1.0
+        },
+        "PortScan": {
+          "windows": 8,
+          "rule": 0.875,
+          "ml": 0.875,
+          "hybrid": 0.875
+        }
+      }
+    },
+    "V1-ratios": {
+      "features": [
+        "bytes_per_flow",
+        "port_ratio",
+        "syn_share",
+        "ack_share"
+      ],
+      "threshold_percentile": 99.9,
+      "fpr_constraint_met": true,
+      "window": {
+        "ml": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "fpr": 0.0009876775467971028
+        },
+        "hybrid": {
+          "precision": 0.10062893081761007,
+          "recall": 0.9411764705882353,
+          "f1": 0.18181818181818182,
+          "fpr": 0.006725613771046938
+        }
+      },
+      "flow": {
+        "ml": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "benign_flow_share_flagged": 0.06782535348826885
+        },
+        "hybrid": {
+          "precision": 0.8137649525009006,
+          "recall": 0.9997281822712114,
+          "f1": 0.8972118406855464,
+          "benign_flow_share_flagged": 0.29146522829681915
+        }
+      },
+      "holdout_benign_flow_share_flagged": 0.2408130787037037,
+      "validation_benign_flow_share_flagged": 0.41692171041228165,
+      "per_category": {
+        "DDoS": {
+          "windows": 9,
+          "rule": 1.0,
+          "ml": 0.0,
+          "hybrid": 1.0
+        },
+        "PortScan": {
+          "windows": 8,
+          "rule": 0.875,
+          "ml": 0.0,
+          "hybrid": 0.875
+        }
+      }
+    },
+    "V2-ratios+rate": {
+      "features": [
+        "bytes_per_flow",
+        "port_ratio",
+        "syn_share",
+        "ack_share",
+        "packet_rate"
+      ],
+      "threshold_percentile": 99.5,
+      "fpr_constraint_met": true,
+      "window": {
+        "ml": {
+          "precision": 0.06995884773662552,
+          "recall": 1.0,
+          "f1": 0.13076923076923078,
+          "fpr": 0.010629291694102153
+        },
+        "hybrid": {
+          "precision": 0.04857142857142857,
+          "recall": 1.0,
+          "f1": 0.09264305177111717,
+          "fpr": 0.015661743956354057
+        }
+      },
+      "flow": {
+        "ml": {
+          "precision": 0.5920732822831456,
+          "recall": 1.0,
+          "f1": 0.7437764189272377,
+          "benign_flow_share_flagged": 0.8777060072658395
+        },
+        "hybrid": {
+          "precision": 0.5880652009967867,
+          "recall": 1.0,
+          "f1": 0.7406058650837178,
+          "benign_flow_share_flagged": 0.8923708685711749
+        }
+      },
+      "holdout_benign_flow_share_flagged": 0.8134215227455717,
+      "validation_benign_flow_share_flagged": 0.8853729182297267,
+      "per_category": {
+        "DDoS": {
+          "windows": 9,
+          "rule": 1.0,
+          "ml": 1.0,
+          "hybrid": 1.0
+        },
+        "PortScan": {
+          "windows": 8,
+          "rule": 0.875,
+          "ml": 1.0,
+          "hybrid": 1.0
+        }
+      }
+    },
+    "V3-ratios+synack": {
+      "features": [
+        "bytes_per_flow",
+        "port_ratio",
+        "syn_ack_ratio",
+        "syn_share"
+      ],
+      "threshold_percentile": 99.9,
+      "fpr_constraint_met": true,
+      "window": {
+        "ml": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "fpr": 0.00023516132066597685
+        },
+        "hybrid": {
+          "precision": 0.11188811188811189,
+          "recall": 0.9411764705882353,
+          "f1": 0.19999999999999998,
+          "fpr": 0.005973097544915812
+        }
+      },
+      "flow": {
+        "ml": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "benign_flow_share_flagged": 0.008568067301502742
+        },
+        "hybrid": {
+          "precision": 0.8457891711013164,
+          "recall": 0.9997281822712114,
+          "f1": 0.9163384663542775,
+          "benign_flow_share_flagged": 0.23220794211005305
+        }
+      },
+      "holdout_benign_flow_share_flagged": 0.2408130787037037,
+      "validation_benign_flow_share_flagged": 0.4376568233702598,
+      "per_category": {
+        "DDoS": {
+          "windows": 9,
+          "rule": 1.0,
+          "ml": 0.0,
+          "hybrid": 1.0
+        },
+        "PortScan": {
+          "windows": 8,
+          "rule": 0.875,
+          "ml": 0.0,
+          "hybrid": 0.875
+        }
+      }
+    }
+  }
+}

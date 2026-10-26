@@ -1,0 +1,33 @@
+{
+  "bundle_version": "0.0.0-dummy",
+  "created_at": "2026-10-25T12:42:50+00:00",
+  "python_version": "3.11.17",
+  "sklearn_version": "1.5.2",
+  "numpy_version": "1.26.4",
+  "feature_order": [
+    "bytes_per_flow",
+    "port_ratio",
+    "syn_ack_ratio",
+    "syn_share"
+  ],
+  "score_definition": "anomaly_score = -model.score_samples(X); higher = more anomalous",
+  "threshold": 0.6596839130567803,
+  "training": {
+    "data": "synthetic benign-like C-02 features, n=5000",
+    "seed": 42,
+    "n_estimators": 100,
+    "contamination": "auto",
+    "R_ref": 5000,
+    "threshold_rule": "99th percentile of training anomaly_score"
+  },
+  "metrics": {
+    "precision": null,
+    "recall": null,
+    "fpr": null,
+    "test_files": []
+  },
+  "contract_versions": {
+    "C-02": "0.2.0-replica",
+    "C-03": "0.2.0-replica"
+  }
+}
