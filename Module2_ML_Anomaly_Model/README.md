@@ -41,6 +41,7 @@ make mock              # dummy bundle → mocks/dummy_bundle + runtime/bundle/cu
 make run               # validate the bundle at MODEL_BUNDLE_PATH
 make integration-test  # the bundle loads and scores identically inside the Spark image (platform up)
 python -m ids_model.train [--install]   # real training (about 5 s): bundle runtime/bundle/1.0.0-replica + docs/measurements/F03-training-<date>.{md,json}
+python -m ids_model.diagnose_ml   # why is ML-only recall ~0? AUC / score position / recall by percentile → docs/measurements/D15-ml-diagnosis-<date>.{md,json}
 ```
 ```python
 from ids_model.features import build_features, features_from_replay   # C-02 in pandas (golden parity)
