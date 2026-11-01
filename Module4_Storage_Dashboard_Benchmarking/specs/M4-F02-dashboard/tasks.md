@@ -25,7 +25,7 @@
 - [x] **M4-T131** Live tests: headless render on synthetic data, write → visible ≤ 5 s, 75k cycle ≤ 2 s · Files: `tests/integration/test_dashboard_live.py` · Refs: AC-07, 08, 09 · Done: 2026-11-01, 3 live tests: F4 3.44 s, 75k cycle 1.61 s
 
 ## Phase 5 — Polish
-- [ ] **M4-T140** README, manual check (AC-11), spec AC table, dev log · Done: _ (README, spec, dev log done; owner sign-off pending)
+- [x] **M4-T140** README, manual check (AC-11), spec AC table, dev log · Done: 2026-11-01, owner signed off
 - [x] **M4-T141** Restyle (spec 1.1.0): `ui.py`, `.streamlit/config.toml`, tiles/strip/header, UTC axes, bar baseline fix, mock `--jitter` · Files: `tests/unit/test_ui.py` + updated chart/page tests · Done: 2026-11-01, 74 unit + 9 live passed
 
 ## Progress
@@ -35,7 +35,7 @@
 | 2 | 3 | 3 | |
 | 3 | 3 | 3 | |
 | 4 | 2 | 2 | |
-| 5 | 2 | 1 | AC-11 sign-off (owner) |
+| 5 | 2 | 2 | |
 
 ## Blockers log
 | Date | Task | Blocked on | Resolution |

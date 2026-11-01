@@ -17,7 +17,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 | Feature | Spec | Status |
 |---|---|---|
 | M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
-| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Implemented, restyled 1.1.0 (AC-11 owner check pending) |
+| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Verified (1.1.0) |
 | M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Not started |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
 

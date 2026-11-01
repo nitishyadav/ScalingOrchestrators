@@ -6,7 +6,7 @@
 | Module | Module4_Storage_Dashboard_Benchmarking |
 | Owner | Vidhi Kant Gupta |
 | Reviewers | Kumari Priyanka (M3, provider of the data shown) |
-| Status | **Implemented** (2026-11-01). Becomes Verified after the AC-11 visual check |
+| Status | **Verified** (2026-11-01). All 11 ACs pass; AC-11 signed off by the owner |
 | Version | 1.1.0 |
 | Created / Updated | 2026-11-01 / 2026-11-01 |
 | Proposal trace | G6 (live dashboard), F4 (alert visible ≤ 5 s after write), F5 (drift banner correct), P1/P2 (shown live) |
@@ -91,7 +91,7 @@ At the full rate, the 300 s span holds ≈ 75k windows (2 partitions) and ≈ 30
 | M4-F02-AC-08 | **Given** anomalous rows written at t **Then** the next refresh shows them, and the measured write → visible time ≤ 5 s | FR-024, NFR-010 | integration | ✅ `integration/…::test_ac08_write_to_visible_within_5s`: **worst case 3.44 s** (3 s refresh + 0.05 s cycle), 2026-11-01 |
 | M4-F02-AC-09 | **Given** 75k windows **Then** one refresh cycle ≤ 2 s | NFR-011 | integration (perf) | ✅ `integration/…::test_ac09_cycle_at_full_rate`: **75,000 windows in 1.61 s**, 2026-11-01 |
 | M4-F02-AC-10 | **Given** rows whose eval-only columns raise on access **Then** the view model still builds | FR-030 | unit | ✅ `unit/test_dashboard_model.py::test_eval_only_never_read` |
-| M4-F02-AC-11 | **Given** `make run` **Then** the page is served on 8501 (manual check, screenshot in the dev log) | FR-029 | manual | 🟡 Served on 8501 via `make run`; screenshot `docs/img/m4-f02-dashboard.png` (headless Chrome, 2026-11-01). Owner sign-off pending |
+| M4-F02-AC-11 | **Given** `make run` **Then** the page is served on 8501 (manual check, screenshot in the dev log) | FR-029 | manual | ✅ Served on 8501 via `make run`; screenshot `docs/img/m4-f02-dashboard.png`. Owner check passed (Vidhi, 2026-11-01) |
 
 ## 10. Edge cases
 | Case | Expected behaviour |

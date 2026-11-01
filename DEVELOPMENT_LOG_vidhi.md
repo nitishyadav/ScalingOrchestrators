@@ -24,8 +24,8 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Implemented (restyled 1.1.0) | S-009 | AC-11 sign-off, then M4-F03 harness |
-| L5 Task / code | 🟡 M4-T001..T041 (F01), M4-T101..T131 + T141 (F02) done | S-009 | M4-T140 sign-off, then M4-F03 tasks |
+| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Verified | S-010 | M4-F03 benchmark harness (before 5 Nov) |
+| L5 Task / code | 🟡 M4-T001..T041 (F01), M4-T101..T141 (F02) done | S-010 | M4-F03 tasks |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
 
@@ -148,6 +148,10 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
   The function default stays 0, so the tests are unchanged.
 - AC-07 live test was flaky: 300 s of data in a 300 s span, plus AppTest start-up time. It now writes 200 s.
 
+### S-010 · 2026-11-01 · L4 Feature · PR-11
+**What:** The owner checked the restyled dashboard at http://localhost:8501 and signed off. M4-F02 is **Verified**: AC-11 ✅, M4-T140 ticked.
+**Verification:** all 11 ACs pass (spec §9).
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -158,5 +162,5 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 | 4 | M3 review and approval of C-04 1.0.0-rc.1. M3 sink and e2e test move `hour` → `bucket`. Drop the live table once | L2 | Priyanka / Vidhi | 2 Nov | Open |
 | 5 | Accept or replace ADR-013 (drift metric, replica draft) | L2 | Vidhi | 2 Nov | Done (S-006) |
 | 6 | M4-F01: init detects the 0.1.0 key (`--recreate`) — done (S-007). Still to do: measure partition sizes at the real rate during I-03 | L4 | Vidhi | 3 Nov | Partly done |
-| 7 | M4-F02 AC-11: open http://localhost:8501 and sign off (screenshot added in S-009) | L4 | Vidhi | 2 Nov | Open |
+| 7 | M4-F02 AC-11: open http://localhost:8501 and sign off (screenshot added in S-009) | L4 | Vidhi | 2 Nov | Done (S-010) |
 | 8 | CR to M1: pin altair 5.5.0 in versions.md (it comes in via streamlit) | L2 | Vidhi | 3 Nov | Open |
