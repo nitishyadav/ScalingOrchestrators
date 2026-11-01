@@ -24,8 +24,8 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Verified | S-010 | M4-F03 benchmark harness (before 5 Nov) |
-| L5 Task / code | 🟡 M4-T001..T041 (F01), M4-T101..T141 (F02) done | S-010 | M4-F03 tasks |
+| L4 Feature | 🟡 M4-F01, F02 Verified · M4-F03 Implemented (AC-01..07) | S-011 | F03 live smoke at I-03, full runs in P3; M4-F04 |
+| L5 Task / code | 🟡 F01, F02 done · F03 M4-T201..T230, T240 done | S-011 | M4-T231 (smoke), T232 (runs) |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
 
@@ -152,6 +152,29 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 **What:** The owner checked the restyled dashboard at http://localhost:8501 and signed off. M4-F02 is **Verified**: AC-11 ✅, M4-T140 ticked.
 **Verification:** all 11 ACs pass (spec §9).
 
+### S-011 · 2026-11-01 · L4/L5 Feature · PR-07..PR-11
+**What:** Built **M4-F03 Benchmark harness**: spec 1.0.0, plan, tasks M4-T201..T240, and **M4-ADR-002** (method).
+- `bench_plan.py`: experiments E1/E2/E3/P1/LAT/REC, C-06 run IDs, commands using C-06 CLIs and flags only.
+- `bench_math.py`: steady state, sustained throughput, producer-bound flag, backlog, p95, 30 s samples, efficiency, detection, drift banner, recovery.
+- `bench_report.py`: raw files, a per-experiment JSON + Markdown report with checks against P1–P5, F2 and F5.
+- `bench.py`: subprocess adapters, `Runner` (topic → job → registered → producer → restart → drain → stop → collect; failures and Ctrl-C), CLI.
+- `make bench`.
+**Why:** G5 and P1–P5. Every number in the report comes from here.
+**Decisions (M4-ADR-002), from the replica's 25 Oct results:**
+- E1/E2 run at a **saturating 15,000 ev/s** and use **sustained throughput**, not Spark's per-batch `processed_rows_per_sec`.
+  At a fixed rate that figure mostly measures per-batch overhead, which is why the replica's E1 got *slower* with more partitions (efficiency 0.22).
+- A level that keeps up with the producer is flagged, so its efficiency is a lower bound, or inconclusive if it is the baseline.
+- E1 uses 4 executors. With 2, the speedup is capped at 2× and P3 can never pass.
+- P2 figure = the median of per-batch p95, with the tail reported next to it.
+- Only C-06 flags are used. M3's job also has `--starting-offsets` and `--shuffle-partitions`, which are not in C-06.
+**Verification:** `make test` 112 passed (38 new). `make contract-test` 5 passed (3 new: `--help` 0, bad flag / unknown level / warm-up 2, dry-run summary line).
+`make bench EXP=REC BENCH_ARGS=--dry-run` prints the 4 exact commands. AC-01..07 ✅.
+**Issues found by the tests:**
+- The job's JSON summary was not saved. Fixed.
+- `--duration 60` collided with the 60 s default warm-up (the documented smoke command would have exited 2). The default is now min(60, duration / 4).
+**Blocked:** AC-08 live smoke and AC-09 full runs. On this machine there is no replay data, no bundle, M1/M3 are not installed, and the Docker VM has 7.65 GB (< 10 GB budget).
+`tests/integration/test_bench_live.py` is written and skips with the reason.
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -164,3 +187,5 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 | 6 | M4-F01: init detects the 0.1.0 key (`--recreate`) — done (S-007). Still to do: measure partition sizes at the real rate during I-03 | L4 | Vidhi | 3 Nov | Partly done |
 | 7 | M4-F02 AC-11: open http://localhost:8501 and sign off (screenshot added in S-009) | L4 | Vidhi | 2 Nov | Done (S-010) |
 | 8 | CR to M1: pin altair 5.5.0 in versions.md (it comes in via streamlit) | L2 | Vidhi | 3 Nov | Open |
+| 9 | M4-F03 live smoke (AC-08) on the platform: needs replay data, bundle, M1/M3 installed, ≥ 10 GB Docker | L4 | Vidhi | 4 Nov (I-03) | Open |
+| 10 | M4-F03 full runs E1, E2, E3, P1, LAT, REC (AC-09, ≈ 3.5 h) | L7 | Vidhi | 10 Nov | Open |

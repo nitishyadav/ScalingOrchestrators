@@ -18,7 +18,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 |---|---|---|
 | M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
 | M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Verified (1.1.0) |
-| M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Not started |
+| M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Implemented (AC-01..07); live smoke and full runs at I-03 / P3 |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
 
 ## Provides → consumers
@@ -81,6 +81,34 @@ drift_summary(recent.rows), top_flagged(recent.rows, n=10)
 store.latest_metrics("DEV-synthetic", limit=60), store.latest_runs()
 db.close(cluster)
 ```
+
+### Benchmarks (M4-F03)
+Prerequisites: platform up and idle (`python -m ids_ingest.platform up --workers 2`), replay data (`ids_ingest.prepare`), a bundle at
+`runtime/bundle/current`, and M1/M3 installed in the same Python (`make install` in `Module1_…` and `Module3_…`). The harness checks this first.
+```bash
+make bench EXP=E1 BENCH_ARGS="--dry-run"                  # plan + exact commands, touches nothing
+make bench EXP=E1 BENCH_ARGS="--levels 1 --duration 60"   # smoke, ≈ 2 min
+make bench EXP=E2                                         # 3 levels × 600 s (≈ 35 min)
+```
+| Exp | Levels | Fixed | Answers |
+|---|---|---|---|
+| E1 | partitions 1, 4, 8, 16 | 4 executors, 15,000 ev/s (saturating) | P3 |
+| E2 | executors 1, 2, 4 | 8 partitions, 15,000 ev/s | P4 |
+| E3 | attack share 0, 5, 20, 100 % | 8 × 2, 5,000 ev/s | F2, F5 |
+| P1 | 16 × 4 | 12,000 ev/s | P1 |
+| LAT | trigger 1000, 500, 250 ms | 8 × 2, 5,000 ev/s | P2 |
+| REC | worker 1 restarted at 50 % | 8 × 2, 5,000 ev/s | P5 |
+
+- **Method (M4-ADR-002):**
+  - Throughput = Σ input rows / steady span, after the warm-up.
+  - A level that keeps up with the producer is flagged, because its throughput is then only a lower bound.
+  - Efficiency is reported as exact, as a lower bound (≥), or as inconclusive.
+  - p95 = the median of the per-batch p95 (D-01).
+- **Outputs:**
+  - Per run, in `results/raw/<run_id>/`: config, commands, each CLI's summary and log, `metrics.csv`, `samples.csv` (every 30 s), `summary.json`,
+    plus `detection.json` (E3) or `recovery.json` (REC).
+  - Per experiment: `results/<EXP>-<stamp>.{json,md}`, with pass/fail checks.
+- **Ctrl-C:** stops the producer and the job gracefully and keeps what was collected.
 
 ### Local Cassandra without the full platform
 ```bash
