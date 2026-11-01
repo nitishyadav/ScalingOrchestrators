@@ -24,8 +24,8 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | 🟡 M4-F01, F02 Verified · M4-F03 Implemented (AC-01..07) | S-011 | F03 live smoke at I-03, full runs in P3; M4-F04 |
-| L5 Task / code | 🟡 F01, F02 done · F03 M4-T201..T230, T240 done | S-011 | M4-T231 (smoke), T232 (runs) |
+| L4 Feature | 🟡 M4-F01, F02 Verified · M4-F03 1.1.0, M4-F04 Implemented | S-012 | F03 live smoke at I-03, full runs in P3, then F04 on the real results |
+| L5 Task / code | 🟡 F01, F02 done · F03 except T231/T232 · F04 except T331 | S-012 | M4-T231, T232, T331 |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
 
@@ -175,6 +175,28 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 **Blocked:** AC-08 live smoke and AC-09 full runs. On this machine there is no replay data, no bundle, M1/M3 are not installed, and the Docker VM has 7.65 GB (< 10 GB budget).
 `tests/integration/test_bench_live.py` is written and skips with the reason.
 
+### S-012 · 2026-11-01 · L4/L5 Feature · PR-07..PR-11
+**What:** Built **M4-F04 Results and report figures** (spec 1.0.0, tasks M4-T301..T340). Also bumped **M4-F03 to 1.1.0**, because F3 needs per-category data that the harness did not record.
+- **M4-F03 1.1.0:** E3 records, per attack category, the share flagged by rule-only, ML-only and hybrid detection, and saves `windows.csv.gz` (the scored windows, for recomputation).
+- **`analyze.py`:**
+  - picks the newest report per experiment and builds the scorecard. Its verdicts are taken from the M4-F03 checks, so the two can never disagree;
+  - builds the F3 table: the attack levels summed, BENIGN taken from the 0 % level;
+  - reads F4 from an evidence file;
+  - writes `RESULTS.md`, `scorecard.json` and `f3.csv`;
+  - CLI and `make analyze`.
+- **`figures.py`:** six figures (scaling, latency, detection, f3, timeline, recovery) as PNG + SVG, deterministic.
+  Dataviz palette slots 1–3, validated all-pairs: worst CVD ΔE 9.2. Aqua is below 3:1 contrast, so its bars carry value labels.
+**Why:** the report (15 Nov) quotes these tables and figures. F3 was in the plan but missing from the replica.
+**Verification:** `make test` 126 passed (13 new). `make contract-test` 7 passed (2 new).
+All six figures were rendered from a synthetic full result set and reviewed visually. Fixes from that review:
+- the ideal-linear line curved on a log x-axis;
+- the legend sat on the data;
+- labels and points were clipped;
+- the recovery line was drawn straight across the 14 s outage, as if batches had run during it.
+
+The tests also caught an off-palette default colour on the hollow markers.
+**Open:** AC-06 (real results, after M4-F03 AC-09). The F4 evidence file must come from the M4-F02 AC-08 measurement.
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -189,3 +211,4 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 | 8 | CR to M1: pin altair 5.5.0 in versions.md (it comes in via streamlit) | L2 | Vidhi | 3 Nov | Open |
 | 9 | M4-F03 live smoke (AC-08) on the platform: needs replay data, bundle, M1/M3 installed, ≥ 10 GB Docker | L4 | Vidhi | 4 Nov (I-03) | Open |
 | 10 | M4-F03 full runs E1, E2, E3, P1, LAT, REC (AC-09, ≈ 3.5 h) | L7 | Vidhi | 10 Nov | Open |
+| 11 | M4-F04 on the real results (AC-06); write `results/evidence/F4.json` from M4-F02 AC-08 | L7 | Vidhi | 12 Nov | Open |

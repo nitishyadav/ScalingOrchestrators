@@ -26,7 +26,18 @@ def write_json(path: Path, obj: Any) -> None:
 
 
 def write_csv(path: Path, rows: Iterable[Mapping[str, Any]], fields: Sequence[str]) -> None:
+    """CSV; gzip-compressed when the name ends in .gz (deterministic: no timestamp in the gzip header)."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix == ".gz":
+        import gzip
+        import io
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=list(fields), extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+        path.write_bytes(gzip.compress(buf.getvalue().encode(), mtime=0))
+        return
     with path.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(fields), extrasaction="ignore")
         w.writeheader()
@@ -35,6 +46,8 @@ def write_csv(path: Path, rows: Iterable[Mapping[str, Any]], fields: Sequence[st
 
 
 METRICS_FIELDS = [c for c, _ in METRICS_COLUMNS]
+WINDOW_FIELDS = ["window_end", "src_ip", "anomaly_score", "ml_flag", "rule_flag", "rule_ids", "is_anomaly",
+                 "label_attack", "label_type"]                     # E3 raw windows (evaluation, ADR-007)
 SAMPLE_FIELDS = ["t_s", "evs", "batches", "p95_median_ms", "p95_max_ms"]
 
 

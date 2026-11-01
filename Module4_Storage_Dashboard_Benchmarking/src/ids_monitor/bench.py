@@ -309,6 +309,8 @@ class Runner:
         if spec.experiment == "E3":
             windows = self.store.read_windows(t_start - 60_000, self.clock.now_ms(), run_id=rid).rows
             run["detection"], run["banner"] = BM.detection(windows), BM.banner(windows, t_start, t_end)
+            BR.write_csv(raw / "windows.csv.gz", sorted(windows, key=lambda w: (w["window_end"], w["src_ip"])),
+                         BR.WINDOW_FIELDS)
             BR.write_json(raw / "detection.json", {"detection": run["detection"], "banner": run["banner"]})
         if spec.restart_at is not None:
             if restart_ms is None:

@@ -71,8 +71,9 @@ def test_efficiency_exact_lower_bound_and_inconclusive():
 
 
 # ---- AC-05 detection, banner, recovery ----
-def w(end, anomalous, attack=False, inj=False):
+def w(end, anomalous, attack=False, inj=False, ml=None, rule=None):
     return {"window_end": end, "is_anomaly": anomalous, "label_attack": attack or inj,
+            "ml_flag": anomalous if ml is None else ml, "rule_flag": False if rule is None else rule,
             "label_type": "INJ_DDOS" if inj else ("DDoS" if attack else "BENIGN")}
 
 
@@ -84,6 +85,19 @@ def test_detection_rates():
     assert d["benign_windows"] == 100 and d["fpr_benign"] == 0.02 and d["cic_attack_windows"] == 1
     assert d["anomalous_share"] == round(12 / 111, 4)
     assert BM.detection([])["recall_injected"] is None
+
+
+def test_f3_rule_vs_hybrid_per_category():
+    ws = ([w(T0, True, inj=True, ml=False, rule=True)] * 3 + [w(T0, True, inj=True, ml=True, rule=False)] * 5
+          + [w(T0, False, inj=True, ml=False, rule=False)] * 2                        # INJ_DDOS: 10 windows
+          + [w(T0, True, attack=True, ml=True, rule=True)]                            # CIC DDoS: 1
+          + [w(T0, True, ml=False, rule=True)] + [w(T0, False)] * 19)                 # BENIGN: 20
+    rows = BM.by_category(ws)
+    assert [r["category"] for r in rows] == ["DDoS", "INJ_DDOS", "BENIGN"]           # BENIGN last
+    inj = rows[1]
+    assert (inj["windows"], inj["rule"], inj["ml"], inj["hybrid"]) == (10, 0.3, 0.5, 0.8)
+    assert (rows[2]["rule"], rows[2]["ml"], rows[2]["hybrid"]) == (0.05, 0.0, 0.05)  # FPR per detector
+    assert BM.detection(ws)["by_category"] == rows
 
 
 def test_banner_rolling_300s_every_30s():

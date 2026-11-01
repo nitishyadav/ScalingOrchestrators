@@ -104,7 +104,35 @@ def detection(windows: Sequence[Mapping]) -> Dict[str, Any]:
         return round(sum(bool(w["is_anomaly"]) for w in xs) / len(xs), 4) if xs else None
     return {"windows": len(windows), "anomalous_share": round(flagged / len(windows), 4) if windows else None,
             "injected_windows": len(inj), "recall_injected": rate(inj),
-            "benign_windows": len(benign), "fpr_benign": rate(benign), "cic_attack_windows": len(cic)}
+            "benign_windows": len(benign), "fpr_benign": rate(benign), "cic_attack_windows": len(cic),
+            "by_category": by_category(windows)}
+
+
+DETECTORS = (("rule", "rule_flag"), ("ml", "ml_flag"), ("hybrid", "is_anomaly"))
+
+
+def category(w: Mapping) -> str:
+    """Attack category of a window from its eval-only labels: injected type, a CIC attack type, or 'BENIGN'."""
+    if not w["label_attack"]:
+        return "BENIGN"
+    return str(w["label_type"] or "ATTACK")
+
+
+def by_category(windows: Sequence[Mapping]) -> List[Dict[str, Any]]:
+    """F3 (online): per category, the share of windows each detector flags (= recall for attacks, FPR for BENIGN).
+    rule = rule_flag, ml = ml_flag, hybrid = is_anomaly (= ml OR rule, C-04)."""
+    groups: Dict[str, List[Mapping]] = {}
+    for w in windows:
+        groups.setdefault(category(w), []).append(w)
+    rows = []
+    for cat in sorted(groups, key=lambda c: (c == "BENIGN", c)):
+        ws = groups[cat]
+        row: Dict[str, Any] = {"category": cat, "windows": len(ws)}
+        for name, col in DETECTORS:
+            row[f"{name}_flagged"] = sum(bool(w[col]) for w in ws)
+            row[name] = round(row[f"{name}_flagged"] / len(ws), 4)
+        rows.append(row)
+    return rows
 
 
 def banner(windows: Sequence[Mapping], start_ms: int, end_ms: int, step_s: int = DRIFT_SAMPLE_S,

@@ -18,7 +18,8 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 |---|---|---|
 | M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
 | M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Verified (1.1.0) |
-| M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Implemented (AC-01..07); live smoke and full runs at I-03 / P3 |
+| M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Implemented 1.1.0 (AC-01..07); live smoke and full runs at I-03 / P3 |
+| M4-F04 Results and report figures | specs/M4-F04-results-analysis/ | Implemented (AC-01..05); run on real results after P3 |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
 
 ## Provides → consumers
@@ -109,6 +110,17 @@ make bench EXP=E2                                         # 3 levels × 600 s (�
     plus `detection.json` (E3) or `recovery.json` (REC).
   - Per experiment: `results/<EXP>-<stamp>.{json,md}`, with pass/fail checks.
 - **Ctrl-C:** stops the producer and the job gracefully and keeps what was collected.
+
+### Results and figures (M4-F04)
+```bash
+make analyze        # newest M4-F03 report per experiment → results/analysis/{RESULTS.md, scorecard.json, f3.csv, figures/}
+```
+- **Scorecard:** P1–P5 and F2–F5, each with its value, verdict (PASS, FAIL, UNKNOWN, NOT RUN) and the source run IDs.
+  The verdicts are the M4-F03 report checks.
+- **F3 table:** rule-only vs ML-only vs hybrid per attack category, from the E3 runs.
+- **F4:** measured by M4-F02 AC-08, not by the harness. Put that result in `results/evidence/F4.json` as `{"worst_case_s": 3.44, "measured": "…", "source": "M4-F02 AC-08"}`.
+- **Figures** (PNG + SVG, light theme for print): scaling, latency, detection, f3, timeline, recovery.
+  A figure whose data is missing is skipped and listed. The output is byte-identical on a rerun.
 
 ### Local Cassandra without the full platform
 ```bash

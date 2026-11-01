@@ -112,8 +112,10 @@ class FakeCli:
             rate = int(argv[argv.index("--rate") + 1])
             start = self.clock.ms
             self.store.metrics[rid] = [_batch(rid, start + i * 1000, self.rows) for i in range(1, dur + 3)]  # +2 drain
-            self.store.windows += [{"window_end": start + i * 10_000, "run_id": rid, "is_anomaly": i % 4 == 0,
-                                    "label_attack": i % 4 == 0, "label_type": "INJ_DDOS" if i % 4 == 0 else "BENIGN"}
+            self.store.windows += [{"window_end": start + i * 10_000, "src_ip": "10.0.0.1", "run_id": rid,
+                                    "is_anomaly": i % 4 == 0, "ml_flag": i % 4 == 0, "rule_flag": False, "rule_ids": "",
+                                    "anomaly_score": 0.5, "label_attack": i % 4 == 0,
+                                    "label_type": "INJ_DDOS" if i % 4 == 0 else "BENIGN"}
                                    for i in range(1, dur // 10 + 1)]
             code = 1 if name in self.fail else 0
             proc = FakeProc(self, name, argv, done_at=start + dur * 1000, code=code,
@@ -167,6 +169,10 @@ def test_e3_writes_detection_and_rec_restarts_worker(tmp_path):
     e3 = r.run_experiment("E3", ["20"])
     det = json.loads((tmp_path / "raw" / e3["runs"][0]["run_id"] / "detection.json").read_text())
     assert det["detection"]["recall_injected"] == 1.0 and "banner" in det
+    assert [r["category"] for r in det["detection"]["by_category"]] == ["INJ_DDOS", "BENIGN"]
+    import gzip
+    raw = tmp_path / "raw" / e3["runs"][0]["run_id"] / "windows.csv.gz"
+    assert gzip.decompress(raw.read_bytes()).decode().splitlines()[0].startswith("window_end,src_ip,")
     r2, cli2, *_ = runner(tmp_path)
     rec = r2.run_experiment("REC")
     restarts = [c for c in cli2.calls if c[2] == "restart"]

@@ -3,7 +3,7 @@ PY ?= $(shell [ -x ../.venv/bin/python ] && echo ../.venv/bin/python || echo pyt
 # pytest exits 5 when no tests are collected (e.g. integration without the docker marker).
 PYTEST = $(PY) -m pytest -q -p no:cacheprovider
 
-.PHONY: install test contract-test run mock clean integration-test bench
+.PHONY: install test contract-test run mock clean integration-test bench analyze
 
 install:
 	$(PY) -m pip install -q -r requirements.txt
@@ -30,6 +30,10 @@ run:
 EXP ?= E1
 bench:
 	$(PY) -m ids_monitor.bench --experiment $(EXP) $(BENCH_ARGS)
+
+# M4-F04: scorecard, F3 table and report figures from the M4-F03 results → $(RESULTS_DIR)/analysis/
+analyze:
+	$(PY) -m ids_monitor.analyze
 
 # M4-F01: contract-valid synthetic windows and metrics for the last 300 s (mock of M3's output).
 mock:
