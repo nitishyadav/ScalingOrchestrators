@@ -38,17 +38,19 @@ def _write(store, run):
 
 
 def test_ac07_page_renders_on_synthetic_data(store, monkeypatch):
-    _write(store, generate_run(current_ms(), seed=11, n_ips=40, n_windows=30, anomaly_share=0.25, run_id="DEV-dash-a"))
+    _write(store, generate_run(current_ms(), seed=11, n_ips=40, n_windows=20, anomaly_share=0.25, run_id="DEV-dash-a"))
+    # 20 windows = 200 s of a 300 s span: AppTest start-up time cannot push the oldest one out (was flaky at 30)
     monkeypatch.setattr(dashboard, "open_store", lambda: store)
     at = AppTest.from_file(APP, default_timeout=30)
     at.run()
     assert not at.exception, at.exception
-    assert len(at.error) == 1 and "Drift alert" in at.error[0].value                # 25 % > 15 %
-    values = {m.label: m.value for m in at.metric}
-    assert values["Windows (span)"] == "1,200" and values["Anomaly rate (span)"] == "25.0 %"
-    assert values["Input throughput (ev/s)"] != "—" and values["p95 latency (ms, target < 500)"] != "—"
-    assert len([s for s in at.subheader]) >= 4 and len(at.dataframe) >= 4            # top table + data tables
-    assert "DEV-dash-a" in at.caption[0].value and "live" in at.caption[0].value
+    page = " | ".join(m.value for m in at.markdown)
+    assert not at.error and page.count('role="alert"') == 1 and "Drift alert" in page  # 25 % > 15 %
+    assert '<div class="t-value ids-num">800</div>' in page                            # windows scored
+    assert '<div class="t-value ids-num">25.0<span class="t-unit">%</span>' in page   # anomaly rate
+    assert page.count('<div class="t-value ids-num">—') == 0                           # every tile has a value
+    assert len(at.get("arrow_vega_lite_chart")) == 3 and len(at.dataframe) >= 4       # 3 charts, top + data tables
+    assert "DEV-dash-a" in page and "LIVE" in page
 
 
 def test_ac08_write_to_visible_within_5s(store):

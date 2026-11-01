@@ -17,7 +17,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 | Feature | Spec | Status |
 |---|---|---|
 | M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
-| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Implemented (AC-11 visual check pending) |
+| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Implemented, restyled 1.1.0 (AC-11 owner check pending) |
 | M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Not started |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
 
@@ -54,10 +54,18 @@ make mock MOCK_ARGS="--anomaly-share 0.3 --follow 300"
 ```
 
 ### Dashboard (M4-F02)
-`make run`, then open http://localhost:8501. For live demo data in a second terminal: `make mock MOCK_ARGS="--anomaly-share 0.2 --follow 600 --run-id DEV-demo"`.
-- **Sidebar:** run (newest first; *Latest run (auto)* follows new runs), span 60–900 s, *Anchor at now*. A finished run is shown as of its last batch.
-- **Live area** (refreshes every 3 s): caption (run, live / as of run end), drift banner (> 15 % of windows in the last 300 s), headline numbers
-  (median throughput and p95 latency of the last 10 batches, anomaly rate, windows), throughput / latency / anomaly-rate charts with data tables, and the top 10 flagged IPs.
+`make run`, then open http://localhost:8501. For live demo data in a second terminal:
+`make mock MOCK_ARGS="--n-ips 300 --anomaly-share 0.17 --follow 1800 --run-id DEV-demo"` (`--jitter 0` for an exact share in every window).
+
+![M4-F02 dashboard](docs/img/m4-f02-dashboard.png)
+
+- **Header:** run, LIVE / ENDED badge, span, last update (UTC). A finished run is shown as of its last batch.
+- **Drift strip:** icon + text + gauge against the 15 % threshold over the last 300 s (ADR-013). Red with "retraining recommended" above it.
+- **Tiles:** input throughput, p95 latency (vs 500 ms), anomaly rate (vs 15 %), windows scored. Medians of the last 10 batches, with the trend
+  vs the 10 before, a status label (On target / Near limit at ≥ 80 % / Over limit) and a sparkline.
+- **Charts** (Chart / Data tabs): throughput per batch, latency p50/p95 with the 500 ms line, anomaly rate per 10 s window with the 15 % line. Times are UTC.
+- **Top 10 flagged source IPs** with rules fired. **Sidebar** (collapsed, `>` top-left): run, span 60–900 s, *Anchor at now*.
+- Theme: `.streamlit/config.toml` (dark). Presentation HTML/CSS: `src/ids_monitor/ui.py`.
 
 ### Using the store from Python (M4-F02, M4-F03)
 ```python

@@ -17,6 +17,21 @@ from ids_monitor.view import Drift, FlaggedIp, drift_summary, top_flagged
 KPI_BATCHES = 10                      # medians over the last 10 qualifying batches (partial/idle batches mislead)
 FINISHED_AFTER_MS = 30_000            # newest batch older than this → the run is over; anchor at its end
 TOP_N = 10
+NEAR = 0.8                            # within 80 % of a limit → "near limit" (warning)
+
+
+def latency_status(p95_ms: Optional[float], target_ms: float = 500.0) -> str:
+    """P2: p95 < 500 ms. good below 80 % of the target, warning up to it, critical at or above it."""
+    if p95_ms is None:
+        return "neutral"
+    return "critical" if p95_ms >= target_ms else "warning" if p95_ms >= NEAR * target_ms else "good"
+
+
+def anomaly_status(rate: Optional[float], threshold: float = S.DRIFT_THRESHOLD) -> str:
+    """G6: drift above 15 %. critical above the threshold (same rule as `drift_alert`), warning from 80 % of it."""
+    if rate is None:
+        return "neutral"
+    return "critical" if rate > threshold else "warning" if rate >= NEAR * threshold else "good"
 
 
 @dataclass(frozen=True)
@@ -25,6 +40,10 @@ class Kpis:
     latency_p95_ms: Optional[float]
     anomaly_rate: Optional[float]     # over the whole span
     windows: int
+    throughput_prev: Optional[float] = None   # same median over the 10 qualifying batches before those (trend)
+    latency_prev_ms: Optional[float] = None
+    ips: int = 0                      # distinct src_ip in the span
+    flagged_ips: int = 0              # distinct src_ip with ≥ 1 anomalous window in the span
 
 
 @dataclass(frozen=True)
@@ -84,10 +103,13 @@ def build_view(windows: Sequence[Mapping], metrics: Sequence[Mapping], anchor_ms
     ms = sorted((m for m in metrics if start <= m["batch_ts"] <= anchor_ms), key=lambda m: m["batch_ts"])
 
     newest = ms[::-1]
-    thr = [m["input_rows_per_sec"] for m in newest if m["input_rows"] > 0][:KPI_BATCHES]
+    thr = [m["input_rows_per_sec"] for m in newest if m["input_rows"] > 0]
     lat = [m["latency_p95_ms"] for m in newest if m["windows_written"] > 0 and m["latency_p95_ms"] is not None]
     span_drift = drift_summary(ws)
-    kpis = Kpis(_median(thr), _median(lat[:KPI_BATCHES]), span_drift.rate if span_drift.total else None, len(ws))
+    kpis = Kpis(_median(thr[:KPI_BATCHES]), _median(lat[:KPI_BATCHES]),
+                span_drift.rate if span_drift.total else None, len(ws),
+                _median(thr[KPI_BATCHES:2 * KPI_BATCHES]), _median(lat[KPI_BATCHES:2 * KPI_BATCHES]),
+                len({w["src_ip"] for w in ws}), len({w["src_ip"] for w in ws if w["is_anomaly"]}))
 
     drift_start = anchor_ms - S.DRIFT_WINDOW_S * 1000
     drift = drift_summary(w for w in ws if w["window_end"] >= drift_start)

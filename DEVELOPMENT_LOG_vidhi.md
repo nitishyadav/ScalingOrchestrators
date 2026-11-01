@@ -24,8 +24,8 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Implemented | S-008 | AC-11 visual check, then M4-F03 harness |
-| L5 Task / code | 🟡 M4-T001..T041 done (M4-F01) | S-007 | M4-F02 tasks |
+| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Implemented (restyled 1.1.0) | S-009 | AC-11 sign-off, then M4-F03 harness |
+| L5 Task / code | 🟡 M4-T001..T041 (F01), M4-T101..T131 + T141 (F02) done | S-009 | M4-T140 sign-off, then M4-F03 tasks |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
 
@@ -133,6 +133,21 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 - Altair is not pinned in versions.md: 5.5.0 is installed via streamlit 1.39. A CR to M1 could add it.
 - Streamlit emits an Altair theme deprecation warning (harmless).
 
+### S-009 · 2026-11-01 · L4/L5 Feature · PR-07..PR-11
+**What:** Restyled the M4-F02 dashboard (spec 1.1.0, M4-T141), after the owner said it looked basic. The FRs and view-model logic are unchanged.
+- New `ui.py` (pure HTML/CSS builders) and `.streamlit/config.toml` (dark theme).
+- Layout: header with run + LIVE/ENDED badge, drift strip with icon, text and gauge, KPI tiles with a status label, trend vs the previous 10 batches and a sparkline,
+  charts in cards with Chart/Data tabs, top-IP table with bars.
+- `dashboard_model.py`: added `latency_status`, `anomaly_status`, previous-10 medians, IP counts.
+**Why:** a professional-looking demo (29 Nov). Status is never colour alone (icon + label).
+**Verification:** `make test` 74 passed. Live 9 passed. Screenshot `Module4_…/docs/img/m4-f02-dashboard.png` (headless Chrome via CDP).
+**Decisions / issues:**
+- **Bug found by looking at the page:** anomaly-rate bars had no zero baseline (x/x2 only), so they rendered as slivers. Fixed with `y2 = 0`, plus a regression test.
+- Chart axes were in the viewer's local time while the header said UTC. All axes and tooltips are now UTC.
+- Synthetic latency was 1–4.5 s (unrealistic vs P2). It is now ≈ 100–410 ms. The mock CLI adds `--jitter` (default 0.4) so the anomaly share varies per window.
+  The function default stays 0, so the tests are unchanged.
+- AC-07 live test was flaky: 300 s of data in a 300 s span, plus AppTest start-up time. It now writes 200 s.
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -143,5 +158,5 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 | 4 | M3 review and approval of C-04 1.0.0-rc.1. M3 sink and e2e test move `hour` → `bucket`. Drop the live table once | L2 | Priyanka / Vidhi | 2 Nov | Open |
 | 5 | Accept or replace ADR-013 (drift metric, replica draft) | L2 | Vidhi | 2 Nov | Done (S-006) |
 | 6 | M4-F01: init detects the 0.1.0 key (`--recreate`) — done (S-007). Still to do: measure partition sizes at the real rate during I-03 | L4 | Vidhi | 3 Nov | Partly done |
-| 7 | M4-F02 AC-11: open http://localhost:8501, check the page, add a screenshot | L4 | Vidhi | 2 Nov | Open |
+| 7 | M4-F02 AC-11: open http://localhost:8501 and sign off (screenshot added in S-009) | L4 | Vidhi | 2 Nov | Open |
 | 8 | CR to M1: pin altair 5.5.0 in versions.md (it comes in via streamlit) | L2 | Vidhi | 3 Nov | Open |

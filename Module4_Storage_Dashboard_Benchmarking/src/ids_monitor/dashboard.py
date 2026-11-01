@@ -12,7 +12,7 @@ import streamlit as st
 
 from ids_contracts.config import load_runtime_config
 
-from ids_monitor import charts, db
+from ids_monitor import charts, db, ui
 from ids_monitor.dashboard_model import View, build_view, choose_anchor, fmt, utc
 from ids_monitor.store import Store, current_ms
 
@@ -50,14 +50,21 @@ def load_view(store: Store, run_choice: str, span_s: int, force_now: bool) -> Vi
 
 
 # ---- rendering -----------------------------------------------------------------------------------
-def _chart(title: str, has_data: bool, chart_fn, rows, empty: str, table: pd.DataFrame) -> None:
-    st.subheader(title)
-    if not has_data:
-        st.info(f"Waiting for data: {empty}")
-        return
-    st.altair_chart(chart_fn(rows), use_container_width=True, theme="streamlit")
-    with st.expander("Data table"):
-        st.dataframe(table, hide_index=True, use_container_width=True)
+def _html(markup: str) -> None:
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def _card(title: str, sub: str, has_data: bool, chart_fn, rows, empty: str, table: pd.DataFrame) -> None:
+    with st.container(border=True):
+        _html(ui.card_title(title, sub))
+        if not has_data:
+            _html(ui.empty_html(empty))
+            return
+        chart_tab, data_tab = st.tabs(["Chart", "Data"])                     # FR-028: every chart has a table
+        with chart_tab:
+            st.altair_chart(chart_fn(rows), use_container_width=True, theme=None)
+        with data_tab:
+            st.dataframe(table, hide_index=True, use_container_width=True, height=240)
 
 
 def _times(rows, key):
@@ -67,42 +74,46 @@ def _times(rows, key):
     return df
 
 
+def _top_table(v: View) -> None:
+    with st.container(border=True):
+        _html(ui.card_title("Top flagged source IPs",
+                            f"Most anomalous windows in the last {v.span_s} s · rules that fired"))
+        if not v.top:
+            _html(ui.empty_html("no flagged IPs in this span."))
+            return
+        df = pd.DataFrame([{"src_ip": t.src_ip, "anomalous windows": t.windows, "max score": t.max_score,
+                            "last seen": ui.hms(t.last_seen), "rules": ", ".join(t.rule_ids) or "—"} for t in v.top])
+        st.dataframe(df, hide_index=True, use_container_width=True, column_config={
+            "src_ip": st.column_config.TextColumn("Source IP", width="small"),
+            "anomalous windows": st.column_config.ProgressColumn(
+                "Windows", format="%d", min_value=0, max_value=int(df["anomalous windows"].max()), width="small",
+                help="Anomalous windows in the span"),
+            "max score": st.column_config.NumberColumn("Max score", format="%.2f", width="small"),
+            "last seen": st.column_config.TextColumn("Last seen", width="small", help="UTC"),
+            "rules": st.column_config.TextColumn("Rules fired", width="large"),
+        })
+
+
 def render(v: View) -> None:
-    st.caption(v.caption)
-    if v.banner.level == "critical":
-        st.error(v.banner.text, icon=v.banner.icon)
-    else:
-        st.success(v.banner.text, icon=v.banner.icon)
+    _html(ui.header_html(v))
+    _html(ui.drift_html(v))                                                    # FR-021: icon + text + gauge
     if not v.has_windows and not v.has_metrics:
-        st.info("Waiting for data: nothing written in this span yet. Start the stream job, or `make mock` for synthetic data.")
+        _html(ui.empty_html("nothing written in this span yet. Start the stream job, or run `make mock`."))
+    _html(ui.tiles_html(v))                                                    # FR-020
 
-    k = v.kpis
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Input throughput (ev/s)", fmt(k.throughput_evs),
-              help="Median input rows/s over the last 10 batches with input (C-05)")
-    c2.metric("p95 latency (ms, target < 500)", fmt(k.latency_p95_ms),
-              help="Median per-batch p95 of detected_at − max_event_ts over the last 10 batches that wrote rows (D-01)")
-    c3.metric("Anomaly rate (span)", "—" if k.anomaly_rate is None else f"{k.anomaly_rate * 100:.1f} %",
-              help="Anomalous windows / all windows in the span. The banner uses the last 300 s (ADR-013)")
-    c4.metric("Windows (span)", f"{k.windows:,}")
-
-    left, right = st.columns(2)
+    left, right = st.columns(2, gap="medium")
     with left:
-        _chart("Throughput", v.has_metrics, charts.throughput_chart, v.throughput, "no pipeline metrics in this span.",
-               _times(v.throughput, "batch_ts"))
+        _card("Throughput", "Rows/s per micro-batch · arrival rate vs processing rate (gap = headroom)", v.has_metrics,
+              charts.throughput_chart, v.throughput, "no pipeline metrics in this span.",
+              _times(v.throughput, "batch_ts"))
     with right:
-        _chart("Latency", bool(v.latency), charts.latency_chart, v.latency, "no batch has written rows in this span.",
-               _times(v.latency, "batch_ts"))
-    _chart("Anomaly rate per 10 s window", v.has_windows, charts.anomaly_rate_chart, v.anomaly_rate,
-           "no windows in this span.", _times(v.anomaly_rate, "window_end"))
-
-    st.subheader("Top flagged source IPs")
-    if v.top:
-        st.dataframe(pd.DataFrame([{"src_ip": t.src_ip, "anomalous windows": t.windows, "max score": t.max_score,
-                                    "last seen (UTC)": utc(t.last_seen), "rules": ", ".join(t.rule_ids) or "—"}
-                                   for t in v.top]), hide_index=True, use_container_width=True)
-    else:
-        st.info("Waiting for data: no flagged IPs in this span.")
+        _card("End-to-end latency", "p50 / p95 per micro-batch · P2 target 500 ms", bool(v.latency),
+              charts.latency_chart, v.latency, "no batch has written rows in this span.",
+              _times(v.latency, "batch_ts"))
+    _card("Anomaly rate per 10 s window", "Share of (source IP, 30 s window) scores flagged · drift line 15 %",
+          v.has_windows, charts.anomaly_rate_chart, v.anomaly_rate, "no windows in this span.",
+          _times(v.anomaly_rate, "window_end"))
+    _top_table(v)                                                              # full width: rule lists need room
 
 
 @st.fragment(run_every=REFRESH_S)
@@ -119,18 +130,21 @@ def live(run_choice: str, span_s: int, force_now: bool) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="IDS live monitor", page_icon="🛡️", layout="wide")
-    st.title("IDS live monitor")
+    st.set_page_config(page_title="IDS Live Monitor", page_icon="🛡️", layout="wide",
+                       initial_sidebar_state="collapsed")
+    _html("\n".join(line for line in ui.CSS.splitlines() if line.strip()))  # blank lines would end the HTML block
     try:
         options = [AUTO] + run_ids(open_store())
     except Exception:                                         # noqa: BLE001 - the live area reports the error
         options = [AUTO]
     with st.sidebar:
-        st.header("View")
+        st.markdown("### View settings")
         run_choice = st.selectbox("Run", options, key="run",
                                   help="Newest first. 'Latest' follows new runs automatically")
         span_s = st.slider("Span (s)", SPAN_MIN, SPAN_MAX, SPAN_DEFAULT, step=30, key="span")
         force_now = st.toggle("Anchor at now", value=False, key="force_now",
                               help="A finished run is shown as of its last batch unless this is on")
-        st.caption(f"Refreshes every {REFRESH_S} s · C-04 / C-05 via M4-F01")
+        st.divider()
+        st.caption(f"Refreshes every {REFRESH_S} s. Data: Cassandra `window_scores` (C-04) and "
+                   f"`pipeline_metrics` (C-05) via M4-F01.")
     live(run_choice, span_s, force_now)

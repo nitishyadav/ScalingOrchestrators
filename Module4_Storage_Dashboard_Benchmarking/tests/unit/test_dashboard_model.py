@@ -115,3 +115,25 @@ class _Guard(dict):
 
 def test_eval_only_never_read():
     view(windows=[_Guard(w) for w in _windows(40, 10)], metrics=[batch(NOW)])
+
+
+# ---- polish: trend, IP counts, status levels ----
+def test_trend_compares_with_previous_10_batches():
+    ms = [batch(NOW - i * 1000, in_rate=2000.0 if i < 10 else 1000.0, p95=200.0 if i < 10 else 400.0) for i in range(20)]
+    k = view(metrics=ms).kpis
+    assert (k.throughput_evs, k.throughput_prev, k.latency_p95_ms, k.latency_prev_ms) == (2000.0, 1000.0, 200.0, 400.0)
+    assert view(metrics=ms[:10]).kpis.throughput_prev is None
+
+
+def test_ip_counts():
+    ws = [window(end=NOW, ip="10.0.0.1", anomalous=True), window(end=NOW - 10_000, ip="10.0.0.1"),
+          window(end=NOW, ip="10.0.0.2")]
+    k = view(windows=ws).kpis
+    assert (k.ips, k.flagged_ips) == (2, 1)
+
+
+def test_status_levels():
+    assert [DM.latency_status(x) for x in (None, 399.0, 400.0, 499.9, 500.0)] == \
+        ["neutral", "good", "warning", "warning", "critical"]
+    assert [DM.anomaly_status(x) for x in (None, 0.10, 0.12, 0.15, 0.1501)] == \
+        ["neutral", "good", "warning", "warning", "critical"]                # 15 % itself is not drift (ADR-013)

@@ -36,8 +36,19 @@ def _common(d):
 def test_throughput_chart():
     d = spec(C.throughput_chart(THROUGHPUT))
     _common(d)
-    assert C.SERIES[:2] == ["#2a78d6", "#eb6834"]
+    assert C.SERIES_LIGHT == ["#2a78d6", "#eb6834"] and C.SERIES == ["#3987e5", "#d95926"]  # validated steps
     assert any(v == C.SERIES[:2] for v in walk(d, "range"))                # fixed slot order
+
+
+def test_charts_are_styled_for_the_dark_page():
+    for chart in (C.throughput_chart(THROUGHPUT), C.latency_chart(LATENCY), C.anomaly_rate_chart(RATE)):
+        cfg = spec(chart)["config"]
+        assert cfg["background"] == "transparent" and cfg["axis"]["gridColor"] == C.GRID
+
+
+def test_anomaly_scale_keeps_threshold_visible():
+    d = spec(C.anomaly_rate_chart(RATE))
+    assert [0, 2 * S.DRIFT_THRESHOLD] in list(walk(d, "domain"))           # max rate 0.2 < 0.3
 
 
 def refs(d):
@@ -62,3 +73,13 @@ def test_reference_lines_use_muted_ink_not_status_colors():
     for chart in (C.latency_chart(LATENCY), C.anomaly_rate_chart(RATE)):
         colors = set(v for v in walk(spec(chart), "color") if isinstance(v, str))
         assert C.MUTED in colors and not colors & set(C.STATUS.values())
+
+
+def test_bars_grow_from_zero_and_times_are_utc():
+    d = spec(C.anomaly_rate_chart(RATE))
+    assert {"datum": 0} in list(walk(d, "y2"))                             # without it bars are slivers at the value
+    for chart in (C.throughput_chart(THROUGHPUT), C.latency_chart(LATENCY), C.anomaly_rate_chart(RATE)):
+        sd = spec(chart)
+        assert {"type": "utc"} in list(walk(sd, "scale"))
+        assert all(t.get("formatType") == "utc" for tips in walk(sd, "tooltip") if isinstance(tips, list)
+                   for t in tips if t.get("type") == "temporal")

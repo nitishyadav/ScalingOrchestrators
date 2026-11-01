@@ -1,0 +1,15 @@
+# M4-F02 dashboard theme (dark). Tokens match src/ids_monitor/ui.py.
+[theme]
+base = "dark"
+primaryColor = "#3987e5"
+backgroundColor = "#0b0e14"
+secondaryBackgroundColor = "#121722"
+textColor = "#e6e9ef"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+showSidebarNavigation = false
+
+[browser]
+gatherUsageStats = false

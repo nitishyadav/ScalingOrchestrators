@@ -52,12 +52,15 @@ def _ip(i: int) -> str:
 
 
 def generate_batch(window_end: int, seed: int, n_ips: int, anomaly_share: float, run_id: str,
-                   batch_id: int = 0) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+                   batch_id: int = 0, jitter: float = 0.0) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """All windows ending at `window_end` (one per IP) and the C-05 row of the batch that wrote them."""
     rng = random.Random(f"{seed}:{window_end}")
     db_, bucket = S.partition_key(window_end)
-    batch_ts = window_end + rng.randint(200, 1_500)        # the sink writes shortly after the window closes
-    anomalous = set(rng.sample(range(n_ips), round(anomaly_share * n_ips)))
+    batch_ts = window_end + rng.randint(80, 260)           # the sink writes shortly after the window closes
+    share = anomaly_share
+    if jitter:                                             # per-window variation, for demos (0 = exact share)
+        share = min(1.0, max(0.0, anomaly_share * (1 + rng.uniform(-jitter, jitter))))
+    anomalous = set(rng.sample(range(n_ips), round(share * n_ips)))
     rows = []
     for i in range(n_ips):
         bad = i in anomalous
@@ -65,7 +68,7 @@ def generate_batch(window_end: int, seed: int, n_ips: int, anomaly_share: float,
         ports = min(events, rng.randint(20, 200) if bad else rng.randint(1, 5))
         ml = bad and rng.random() < 0.6
         rule_ids = ",".join(sorted(rng.sample(RULES, rng.randint(1, 2)))) if bad and (not ml or rng.random() < 0.4) else ""
-        max_event_ts = window_end - rng.randint(1, 3_000)
+        max_event_ts = window_end - rng.randint(20, 150)     # → end-to-end latency ≈ 100–410 ms (P2 < 500 ms)
         rows.append({
             "date_bucket": db_, "bucket": bucket, "window_end": window_end, "src_ip": _ip(i),
             "window_start": window_end - S.WINDOW_MS, "total_bytes": events * rng.randint(60, 1_500),
@@ -91,7 +94,7 @@ def generate_batch(window_end: int, seed: int, n_ips: int, anomaly_share: float,
 
 
 def generate_run(end_ms: int, seed: int, n_ips: int, n_windows: int, anomaly_share: float,
-                 run_id: str) -> SyntheticRun:
+                 run_id: str, jitter: float = 0.0) -> SyntheticRun:
     """`n_windows` consecutive window_ends (10 s apart), the last one ≤ end_ms on the slide grid."""
     _check(n_ips, anomaly_share, run_id)
     if n_windows < 1:
@@ -100,7 +103,7 @@ def generate_run(end_ms: int, seed: int, n_ips: int, n_windows: int, anomaly_sha
     windows: List[Dict[str, Any]] = []
     metrics: List[Dict[str, Any]] = []
     for k, end in enumerate(range(last - (n_windows - 1) * S.SLIDE_MS, last + 1, S.SLIDE_MS)):
-        rows, m = generate_batch(end, seed, n_ips, anomaly_share, run_id, batch_id=k)
+        rows, m = generate_batch(end, seed, n_ips, anomaly_share, run_id, batch_id=k, jitter=jitter)
         windows += rows
         metrics.append(m)
     run = {"bucket": M.RUNS_BUCKET, "started_at": windows[0]["window_start"], "run_id": run_id,
@@ -120,6 +123,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--n-ips", type=int, default=50)
     p.add_argument("--windows", type=int, default=30, help="window_ends to write ending now (30 = last 300 s)")
     p.add_argument("--anomaly-share", type=float, default=0.1)
+    p.add_argument("--jitter", type=float, default=0.4,
+                   help="per-window relative variation of the anomaly share (0 = exact share in every window)")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--run-id", default=None, help=f"→ RUN_ID (default {DEFAULT_RUN_ID} when RUN_ID is unset)")
     p.add_argument("--end-ms", type=int, default=None, help="last window_end (epoch ms, default now)")
@@ -137,7 +142,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         run_id = args.run_id or (DEFAULT_RUN_ID if cfg.run_id == "DEV-local" else cfg.run_id)
         try:
             run = generate_run(args.end_ms or current_ms(), args.seed, args.n_ips, args.windows,
-                               args.anomaly_share, run_id)
+                               args.anomaly_share, run_id, args.jitter)
         except ValueError as exc:
             raise cli.UsageError(str(exc)) from None
         if args.follow < 0:
@@ -154,7 +159,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             while time.monotonic() < deadline:
                 time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
                 for end in next_window_ends(last, current_ms()):
-                    rows, m = generate_batch(end, args.seed, args.n_ips, args.anomaly_share, run_id, batch_id)
+                    rows, m = generate_batch(end, args.seed, args.n_ips, args.anomaly_share, run_id, batch_id, args.jitter)
                     n_w += store.write_windows(rows)
                     n_m += store.write_metrics([m])
                     batch_id += 1

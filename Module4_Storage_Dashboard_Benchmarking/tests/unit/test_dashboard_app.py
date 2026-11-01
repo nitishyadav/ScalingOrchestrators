@@ -59,19 +59,25 @@ def _live(anomalous, total=100, run="DEV-test"):
     return FakeStore(ws, ms, runs)
 
 
+def html(at):
+    return " | ".join(m.value for m in at.markdown)
+
+
 def test_alert_banner_and_top_table(monkeypatch):
     at = run_app(monkeypatch, _live(anomalous=30))
-    assert len(at.error) == 1 and "Drift alert: anomaly rate 30.0 % > 15 %" in at.error[0].value
-    assert at.error[0].icon
-    assert [m.label for m in at.metric][:3] == ["Input throughput (ev/s)", "p95 latency (ms, target < 500)",
-                                                "Anomaly rate (span)"]
+    page = html(at)
+    assert page.count('class="ids-drift critical" role="alert"') == 1           # one banner, announced
+    assert "Drift alert: anomaly rate 30.0 % &gt; 15 %" in page and "🚨" in page  # icon + text, not colour alone
+    for label in ("Input throughput", "p95 latency", "Anomaly rate", "Windows scored"):
+        assert f'<div class="t-label">{label}</div>' in page
+    assert "30.0" in page and "LIVE" in page and "DEV-test" in page and not at.error
     top = [d for d in at.dataframe if "src_ip" in d.value.columns]
     assert top and len(top[0].value) == 10
 
 
 def test_no_drift_banner(monkeypatch):
-    at = run_app(monkeypatch, _live(anomalous=10))
-    assert not at.error and any("No drift" in s.value for s in at.success)
+    page = html(run_app(monkeypatch, _live(anomalous=10)))
+    assert "No drift" in page and "Drift alert" not in page and 'class="ids-drift good"' in page
 
 
 def test_empty_store_waits_for_data(monkeypatch):

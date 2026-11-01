@@ -7,7 +7,7 @@
 | Owner | Vidhi Kant Gupta |
 | Reviewers | Kumari Priyanka (M3, provider of the data shown) |
 | Status | **Implemented** (2026-11-01). Becomes Verified after the AC-11 visual check |
-| Version | 1.0.0 |
+| Version | 1.1.0 |
 | Created / Updated | 2026-11-01 / 2026-11-01 |
 | Proposal trace | G6 (live dashboard), F4 (alert visible ≤ 5 s after write), F5 (drift banner correct), P1/P2 (shown live) |
 | Contracts touched | C-04 1.0.0-rc.1 (reads), C-05 0.1.0-replica (reads), C-06 1.0.0-rc.7 (config, service `dashboard` on 8501) |
@@ -91,7 +91,7 @@ At the full rate, the 300 s span holds ≈ 75k windows (2 partitions) and ≈ 30
 | M4-F02-AC-08 | **Given** anomalous rows written at t **Then** the next refresh shows them, and the measured write → visible time ≤ 5 s | FR-024, NFR-010 | integration | ✅ `integration/…::test_ac08_write_to_visible_within_5s`: **worst case 3.44 s** (3 s refresh + 0.05 s cycle), 2026-11-01 |
 | M4-F02-AC-09 | **Given** 75k windows **Then** one refresh cycle ≤ 2 s | NFR-011 | integration (perf) | ✅ `integration/…::test_ac09_cycle_at_full_rate`: **75,000 windows in 1.61 s**, 2026-11-01 |
 | M4-F02-AC-10 | **Given** rows whose eval-only columns raise on access **Then** the view model still builds | FR-030 | unit | ✅ `unit/test_dashboard_model.py::test_eval_only_never_read` |
-| M4-F02-AC-11 | **Given** `make run` **Then** the page is served on 8501 (manual check, screenshot in the dev log) | FR-029 | manual | 🟡 Served: `/_stcore/health` = ok on 8501 via `make run` (2026-11-01). Visual check by the owner pending |
+| M4-F02-AC-11 | **Given** `make run` **Then** the page is served on 8501 (manual check, screenshot in the dev log) | FR-029 | manual | 🟡 Served on 8501 via `make run`; screenshot `docs/img/m4-f02-dashboard.png` (headless Chrome, 2026-11-01). Owner sign-off pending |
 
 ## 10. Edge cases
 | Case | Expected behaviour |
@@ -120,3 +120,4 @@ None.
 | Version | Date | Author | Change |
 |---|---|---|---|
 | 1.0.0 | 2026-11-01 | Vidhi Kant Gupta (with AI) | Initial approved version |
+| 1.1.0 | 2026-11-01 | Vidhi Kant Gupta (with AI) | Presentation only, FRs unchanged: dark theme, header with LIVE/ENDED badge, drift strip with gauge, KPI tiles with status label + trend + sparkline, Chart/Data tabs (FR-028), all times UTC. Fixed: anomaly-rate bars had no zero baseline. AC-07 test writes 200 s of data (was flaky at 300 s) |
