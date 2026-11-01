@@ -24,7 +24,7 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | 🟡 M4-F01 Verified | S-007 | M4-F02 dashboard |
+| L4 Feature | 🟡 M4-F01 Verified, M4-F02 Implemented | S-008 | AC-11 visual check, then M4-F03 harness |
 | L5 Task / code | 🟡 M4-T001..T041 done (M4-F01) | S-007 | M4-F02 tasks |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
@@ -112,6 +112,27 @@ All 12 ACs ✅. Spec status: Verified.
 **Decisions / issues:** The first live run failed in the round-trip test. Two synthetic runs shared IPs and window_ends, so run b upserted over run a. That is the correct C-04 key semantics, so the fix was in the test (distinct IPs).
 Note: concurrent runs that share (window, `src_ip`) overwrite each other, because `run_id` is not in the key. Experiments run one at a time.
 
+### S-008 · 2026-11-01 · L4/L5 Feature · PR-07..PR-11
+**What:** Built **M4-F02 Live dashboard**: spec 1.0.0, plan and tasks M4-T101..T140.
+- `dashboard_model.py` (pure view model): medians of the last 10 qualifying batches, drift banner over the last 300 s, per-window anomaly rate, top 10 IPs,
+  "as of run end" anchoring, empty states.
+- `charts.py`: Altair, one y-axis per chart, dashed reference lines at 15 % and 500 ms, hover tooltips.
+  Reference palette blue/orange, validated light + dark (CVD ΔE 24.7, all checks pass).
+- `dashboard.py` + `dashboard_app.py`: sidebar controls, `st.fragment(run_every=3)`.
+- `make run` = schema apply + Streamlit on 8501.
+**Why:** G6, F4, F5. This is the centrepiece of the demo.
+**Artifacts:** `Module4_…/specs/M4-F02-dashboard/*`, `src/ids_monitor/{dashboard_model,charts,dashboard,dashboard_app}.py`,
+`tests/unit/{test_dashboard_model,test_charts,test_dashboard_app}.py`, `tests/integration/test_dashboard_live.py`, `Makefile`, `README.md`.
+**Verification:** `make test` 63 passed. `make contract-test` 2 passed. Live tests 9 passed (F01 + F02).
+- **F4 (AC-08):** write → visible worst case **3.44 s** (target ≤ 5 s).
+- **AC-09:** 75,000 windows → view + 3 charts in **1.61 s** (target ≤ 2 s).
+- `make run` serves on 8501 (health ok).
+- AC-11 visual check: pending. The Chrome extension was not connected, so there is no screenshot yet.
+**Decisions / issues:**
+- The first AC-09 run counted 72,500 windows because writing 75k rows takes ≈ 10 s and "now" moved past a slide. Fixed by pinning the dashboard clock in that test.
+- Altair is not pinned in versions.md: 5.5.0 is installed via streamlit 1.39. A CR to M1 could add it.
+- Streamlit emits an Altair theme deprecation warning (harmless).
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -122,3 +143,5 @@ Note: concurrent runs that share (window, `src_ip`) overwrite each other, becaus
 | 4 | M3 review and approval of C-04 1.0.0-rc.1. M3 sink and e2e test move `hour` → `bucket`. Drop the live table once | L2 | Priyanka / Vidhi | 2 Nov | Open |
 | 5 | Accept or replace ADR-013 (drift metric, replica draft) | L2 | Vidhi | 2 Nov | Done (S-006) |
 | 6 | M4-F01: init detects the 0.1.0 key (`--recreate`) — done (S-007). Still to do: measure partition sizes at the real rate during I-03 | L4 | Vidhi | 3 Nov | Partly done |
+| 7 | M4-F02 AC-11: open http://localhost:8501, check the page, add a screenshot | L4 | Vidhi | 2 Nov | Open |
+| 8 | CR to M1: pin altair 5.5.0 in versions.md (it comes in via streamlit) | L2 | Vidhi | 3 Nov | Open |

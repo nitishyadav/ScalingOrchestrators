@@ -17,7 +17,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 | Feature | Spec | Status |
 |---|---|---|
 | M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
-| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Not started |
+| M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Implemented (AC-11 visual check pending) |
 | M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Not started |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
 
@@ -39,7 +39,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 make install
 make test
 make contract-test
-make run    # apply + check the C-04/C-05 schema (idempotent); the dashboard joins in M4-F02
+make run    # apply + check the C-04/C-05 schema, then serve the dashboard on http://localhost:8501
 make mock   # synthetic C-04/C-05 rows for the last 300 s (M4-F01)
 make integration-test   # live tests; needs Cassandra on CASSANDRA_HOSTS:CASSANDRA_PORT
 ```
@@ -52,6 +52,12 @@ python -m ids_monitor.schema check              # exit 1 and list every differen
 python -m ids_monitor.synthetic --n-ips 50 --windows 30 --anomaly-share 0.1 --seed 42 [--follow 600]
 make mock MOCK_ARGS="--anomaly-share 0.3 --follow 300"
 ```
+
+### Dashboard (M4-F02)
+`make run`, then open http://localhost:8501. For live demo data in a second terminal: `make mock MOCK_ARGS="--anomaly-share 0.2 --follow 600 --run-id DEV-demo"`.
+- **Sidebar:** run (newest first; *Latest run (auto)* follows new runs), span 60–900 s, *Anchor at now*. A finished run is shown as of its last batch.
+- **Live area** (refreshes every 3 s): caption (run, live / as of run end), drift banner (> 15 % of windows in the last 300 s), headline numbers
+  (median throughput and p95 latency of the last 10 batches, anomaly rate, windows), throughput / latency / anomaly-rate charts with data tables, and the top 10 flagged IPs.
 
 ### Using the store from Python (M4-F02, M4-F03)
 ```python

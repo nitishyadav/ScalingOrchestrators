@@ -18,9 +18,12 @@ contract-test:
 integration-test:
 	$(PYTEST) tests/integration -m docker || [ $$? -eq 5 ]
 
-# M4-F01: apply + check the C-04/C-05 schema (idempotent). The dashboard (M4-F02) is added here later.
+# M4-F01 schema apply + check (idempotent), then the M4-F02 dashboard on the C-06 `dashboard` port.
+DASHBOARD_PORT = 8501
 run:
 	$(PY) -m ids_monitor.schema apply
+	$(PY) -m streamlit run src/ids_monitor/dashboard_app.py --server.port $(DASHBOARD_PORT) --server.headless true \
+		--browser.gatherUsageStats false
 
 # M4-F01: contract-valid synthetic windows and metrics for the last 300 s (mock of M3's output).
 mock:
