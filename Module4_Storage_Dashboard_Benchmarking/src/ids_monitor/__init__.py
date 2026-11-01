@@ -1,8 +1,6 @@
-"""Module 4 — Storage, Dashboard and Benchmarking. REPLICA built by Aswin S. (M1); canonical owner Vidhi Kant Gupta.
+"""Module 4 — Storage, Dashboard and Benchmarking (canonical, owner: Vidhi Kant Gupta).
 
-Only `ids_contracts` may be imported from outside this package (Constitution Art. III).
+Owns contract C-04 (Anomaly Store). Consumes C-05 (Pipeline Metrics) and C-06 (Runtime Config and Control).
 """
-from pathlib import Path
 
-__version__ = "0.1.0-replica"
-MODULE_DIR = Path(__file__).resolve().parents[2]
+__version__ = "1.0.0.dev0"

@@ -9,7 +9,6 @@ from ids_contracts import FIXTURES_DIR, SCHEMAS_DIR
 from ids_contracts import bundle as B
 from ids_contracts import features as F
 from ids_contracts import metrics as M
-from ids_contracts import store as S
 from ids_contracts.events import iter_jsonl
 
 GOLDEN_FEATURES = FIXTURES_DIR / "features_golden.csv"
@@ -149,7 +148,7 @@ def test_json_schemas_agree():
     assert list(jsonschema.Draft202012Validator(json.loads((SCHEMAS_DIR / "rules.schema.json").read_text())).iter_errors(bad))
 
 
-# ---- C-04 / C-05: python constants equal the DDL ------------------------------------------------
+# ---- C-05: python constants equal the DDL (C-04 moved to test_store.py, owner M4) ------------------------------------------------
 def cql_tables(path):
     text = re.sub(r"--[^\n]*", "", path.read_text())
     tables = {}
@@ -161,37 +160,10 @@ def cql_tables(path):
     return tables
 
 
-def test_store_constants_match_ddl():
-    t = cql_tables(SCHEMAS_DIR / "ids_schema.cql")["window_scores"]
-    assert t["columns"] == S.COLUMNS
-    assert t["partition"] == S.PARTITION_KEY and t["clustering"] == tuple(c for c, _ in S.CLUSTERING)
-    assert "window_end DESC, src_ip ASC" in t["options"] and f"default_time_to_live = {S.TTL_S}" in t["options"]
-
-
 def test_metrics_constants_match_ddl():
     t = cql_tables(SCHEMAS_DIR / "metrics_schema.cql")
     assert t["pipeline_metrics"]["columns"] == M.METRICS_COLUMNS and t["runs"]["columns"] == M.RUNS_COLUMNS
     assert t["pipeline_metrics"]["partition"] == ("run_id",) and t["runs"]["partition"] == ("bucket",)
-
-
-def _row():
-    end = BASE + 30_000
-    db, hr = S.partition_key(end)
-    return {"date_bucket": db, "hour": hr, "window_end": end, "src_ip": "10.0.0.1", "window_start": BASE,
-            "total_bytes": 10, "unique_ports": 1, "syn_ack_ratio": 0.5, "packet_rate": 0.1, "event_count": 3,
-            "anomaly_score": 0.4, "ml_flag": False, "rule_flag": True, "rule_ids": "R-SYN-FLOOD", "is_anomaly": True,
-            "max_event_ts": BASE + 29_000, "detected_at": BASE + 29_400, "bundle_version": "0.0.0-dummy",
-            "run_id": "DEV-local", "label_attack": False, "label_type": "BENIGN"}
-
-
-def test_store_row_validation():
-    assert S.partition_key(BASE + 30_000) == ("2026-01-01", 0)
-    assert S.validate_row(_row()) == []
-    assert S.validate_row(dict(_row(), hour=5))
-    assert S.validate_row(dict(_row(), is_anomaly=False))
-    assert S.validate_row(dict(_row(), rule_ids=""))
-    assert S.validate_row(dict(_row(), src_ip=None))
-    assert S.drift_alert(16, 100) and not S.drift_alert(15, 100) and not S.drift_alert(0, 0)
 
 
 def test_metrics_rows_and_percentile():
