@@ -24,8 +24,8 @@ Never rewrite past entries. Add a correcting entry instead.
 | L1 SDD framework | 🟡 Constitution not yet signed by M4 | — | PR-02: sign the M4 row |
 | L2 Contracts | 🟡 C-04 1.0.0-rc.1 In Review | S-005 | PR-05: M3 review of C-04; review C-05 |
 | L3 Module | 🟡 Owner skeleton created, M4-ADR-001 Accepted | S-004 | — |
-| L4 Feature | ⬜ | — | M4-F01 spec |
-| L5 Task / code | ⬜ | — | — |
+| L4 Feature | 🟡 M4-F01 Verified | S-007 | M4-F02 dashboard |
+| L5 Task / code | 🟡 M4-T001..T041 done (M4-F01) | S-007 | M4-F02 tasks |
 | L6 Integration | ⬜ | — | I-03 with M3 (2–4 Nov) |
 | L7 Experiments | ⬜ | — | P3 (5–10 Nov) |
 
@@ -96,6 +96,22 @@ These are M3's changes, not mine (Art. III).
 **Verification:** n/a.
 **Decisions / issues:** none.
 
+### S-007 · 2026-11-01 · L4/L5 Feature · PR-07..PR-11
+**What:** Built **M4-F01 Store schema and access** end to end: spec 1.0.0, plan, tasks M4-T001..T041, then the code.
+- `schema.py`: apply/check, plus `--recreate` for the 0.1.0 key.
+- `store.py`: partition-key reads per 5-minute bucket, validated writes.
+- `view.py`: drift summary and top flagged IPs. It never reads labels.
+- `synthetic.py`: the seeded mock of M3, including follow mode.
+- `cli.py` / `db.py`: C-06 exit codes and summary line.
+- `make run` = schema apply. `make mock` = synthetic data.
+**Why:** M3 ↔ M4 integration (I-03, 2–4 Nov) needs the schema and a verified read path. M4-F02/F03 build on `Store` + `view`.
+**Artifacts:** `Module4_…/specs/M4-F01-store-schema-access/*`, `src/ids_monitor/{cli,db,schema,store,view,synthetic}.py`, `tests/{unit,contract,integration}/*`, `Makefile`, `README.md`.
+**Verification:** `make test` 43 passed. `make contract-test` 2 passed. `make integration-test` 6 passed, run on a local `cassandra:4.1.10` container `ids-m4-cassandra`.
+AC-12 perf: 75,000 rows from 2 partitions in **1.48 s** (target ≤ 3 s), drift and top-N in 0.012 s.
+All 12 ACs ✅. Spec status: Verified.
+**Decisions / issues:** The first live run failed in the round-trip test. Two synthetic runs shared IPs and window_ends, so run b upserted over run a. That is the correct C-04 key semantics, so the fix was in the test (distinct IPs).
+Note: concurrent runs that share (window, `src_ip`) overwrite each other, because `run_id` is not in the key. Experiments run one at a time.
+
 ## Open items
 
 | # | Item | Level | Owner | Due | Status |
@@ -105,4 +121,4 @@ These are M3's changes, not mine (Art. III).
 | 3 | Review C-05 as a consumer | L2 | Vidhi | 2 Nov | Open |
 | 4 | M3 review and approval of C-04 1.0.0-rc.1. M3 sink and e2e test move `hour` → `bucket`. Drop the live table once | L2 | Priyanka / Vidhi | 2 Nov | Open |
 | 5 | Accept or replace ADR-013 (drift metric, replica draft) | L2 | Vidhi | 2 Nov | Done (S-006) |
-| 6 | M4-F01: init detects the 0.1.0 key (`--recreate`), and measure partition sizes live | L4 | Vidhi | 3 Nov | Open |
+| 6 | M4-F01: init detects the 0.1.0 key (`--recreate`) — done (S-007). Still to do: measure partition sizes at the real rate during I-03 | L4 | Vidhi | 3 Nov | Partly done |

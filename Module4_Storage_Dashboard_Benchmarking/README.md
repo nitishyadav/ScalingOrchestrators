@@ -16,7 +16,7 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 ## Scope (features)
 | Feature | Spec | Status |
 |---|---|---|
-| M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Not started |
+| M4-F01 Store schema and access | specs/M4-F01-store-schema-access/ | Implemented (see spec AC table) |
 | M4-F02 Live dashboard | specs/M4-F02-dashboard/ | Not started |
 | M4-F03 Benchmark harness | specs/M4-F03-benchmark-harness/ | Not started |
 | M4-F04 Results analysis | specs/M4-F04-results-analysis/ | Not started |
@@ -39,9 +39,40 @@ operations dashboard with its drift alert (G6), and the scripted benchmark harne
 make install
 make test
 make contract-test
-make mock   # synthetic C-04/C-05 rows (M4-F01)
-make run    # schema + dashboard (M4-F01, M4-F02); needs env from C-06
+make run    # apply + check the C-04/C-05 schema (idempotent); the dashboard joins in M4-F02
+make mock   # synthetic C-04/C-05 rows for the last 300 s (M4-F01)
+make integration-test   # live tests; needs Cassandra on CASSANDRA_HOSTS:CASSANDRA_PORT
 ```
+
+### M4-F01 commands (C-06 conventions: exit 0 ok / 1 runtime / 2 usage, one JSON summary line last)
+```bash
+python -m ids_monitor.schema apply              # create keyspace + tables, then check for drift
+python -m ids_monitor.schema apply --recreate   # drop + recreate tables whose primary key changed (0.1.0 → 1.0 key)
+python -m ids_monitor.schema check              # exit 1 and list every difference from the contracts
+python -m ids_monitor.synthetic --n-ips 50 --windows 30 --anomaly-share 0.1 --seed 42 [--follow 600]
+make mock MOCK_ARGS="--anomaly-share 0.3 --follow 300"
+```
+
+### Using the store from Python (M4-F02, M4-F03)
+```python
+from ids_contracts.config import load_runtime_config
+from ids_monitor import db
+from ids_monitor.store import Store
+from ids_monitor.view import drift_summary, top_flagged
+
+cluster, session = db.connect(load_runtime_config())
+store = Store(session)                       # keyspace defaults to "ids"; pass cfg.cassandra_keyspace
+recent = store.read_recent(300)              # ReadResult(rows, invalid, partitions), rows newest first
+drift_summary(recent.rows), top_flagged(recent.rows, n=10)
+store.latest_metrics("DEV-synthetic", limit=60), store.latest_runs()
+db.close(cluster)
+```
+
+### Local Cassandra without the full platform
+```bash
+docker run -d --name ids-m4-cassandra -p 9042:9042 -e MAX_HEAP_SIZE=1G -e HEAP_NEWSIZE=256M cassandra:4.1.10
+```
+The full platform (Kafka, Spark, Cassandra) is started by M1: `python -m ids_ingest.platform`.
 
 ## Environment variables (from C-06)
 | Variable | Default | Purpose |

@@ -1,6 +1,6 @@
 # Module 4 — standard targets (Constitution Art. V)
 PY ?= $(shell [ -x ../.venv/bin/python ] && echo ../.venv/bin/python || echo python3)
-# pytest exits 5 when no tests are collected; accepted until the first feature lands.
+# pytest exits 5 when no tests are collected (e.g. integration without the docker marker).
 PYTEST = $(PY) -m pytest -q -p no:cacheprovider
 
 .PHONY: install test contract-test run mock clean integration-test
@@ -18,13 +18,13 @@ contract-test:
 integration-test:
 	$(PYTEST) tests/integration -m docker || [ $$? -eq 5 ]
 
-# Defined by M4-F01 (schema apply/check) and M4-F02 (dashboard).
+# M4-F01: apply + check the C-04/C-05 schema (idempotent). The dashboard (M4-F02) is added here later.
 run:
-	@echo "run: not implemented yet (M4-F01, M4-F02)"; exit 1
+	$(PY) -m ids_monitor.schema apply
 
-# Defined by M4-F01 (synthetic C-04/C-05 rows).
+# M4-F01: contract-valid synthetic windows and metrics for the last 300 s (mock of M3's output).
 mock:
-	@echo "mock: not implemented yet (M4-F01)"; exit 1
+	$(PY) -m ids_monitor.synthetic $(MOCK_ARGS)
 
 clean:
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
