@@ -1,84 +1,99 @@
-"""M4-F04 results analysis (AC-01..AC-03), on synthetic M4-F03 outputs."""
-import csv
+"""M4-T310: report selection, scorecard, F3 table, evidence, outputs (AC-01, 02, 03, 05)."""
 import json
-from dataclasses import asdict
 
 import pytest
 
-from conftest import BASE
-from ids_monitor import analyze as an
-from ids_monitor import bench as bn
+from ids_monitor import analyze as A
+from ids_monitor import bench_report as BR
+
+import results_fixture as RF
 
 
-def run(spec, stamp="202610251400", **summary):
-    base = {"sustained_evs": 5000.0, "capacity_rows_per_s": 10_000.0, "latency_p95_ms": 900.0, "latency_p95_worst_ms": 1100.0,
-            "batch_duration_ms": 500.0, "backlog_s": 0.0, "keeping_up": True}
-    return {"run_id": spec.run_id(stamp), "spec": asdict(spec), "status": "ok", "summary": {**base, **summary},
-            "times_ms": {"producer_start": BASE, "producer_end": BASE + 600_000}}
+# ---- AC-01 ----
+def test_latest_reports_newest_per_experiment(tmp_path):
+    RF.write(tmp_path, "202611061430", only={"E1"})
+    RF.write(tmp_path, "202611071000", only={"E1", "E2"})
+    (tmp_path / "smoke").mkdir()
+    BR.write_json(tmp_path / "smoke" / "E1-202612010000.json", {"experiment": "E1"})   # ignored: subfolder
+    (tmp_path / "E2-202612010000.json").write_text("{not json")                       # broken: skipped
+    (tmp_path / "notes.json").write_text("{}")                                          # not a report name
+    got = A.latest_reports(tmp_path)
+    assert {k: p.name for k, (p, _) in got.items()} == {"E1": "E1-202611071000.json", "E2": "E2-202611071000.json"}
 
 
-def write(results, exp, runs, stamp="202610251400", sub=None):
-    rep = bn.experiment_report(exp, runs, 600, 60)
-    rep.update(interrupted=False, report_stem=f"{exp}-{stamp}")
-    d = results / sub if sub else results
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"{exp}-{stamp}.json").write_text(json.dumps(rep, default=str))
-    return rep
+# ---- AC-02 ----
+def rows(tmp_path, evidence=None):
+    RF.write(tmp_path)
+    if evidence:
+        BR.write_json(tmp_path / "evidence" / "F4.json", evidence)
+    return {r["id"]: r for r in A.scorecard(A.latest_reports(tmp_path), A.load_evidence(tmp_path))}
 
 
-def det(share, alert, fpr=0.01):
-    return {"windows": 1000, "anomalous": int(share * 1000), "anomalous_share": share,
-            "injected": {"windows": 10, "flagged": 10, "recall": 1.0}, "cic_attack": {"windows": 0, "flagged": 0, "recall": None},
-            "benign": {"windows": 990, "flagged": int(fpr * 990), "fpr": fpr},
-            "banner": {"samples": 10, "max_share": share + 0.02, "alert_fraction": alert, "threshold": 0.15, "span_s": 300}}
+def test_scorecard_values_verdicts_sources(tmp_path):
+    card = rows(tmp_path)
+    assert list(card) == ["P1", "P2", "P3", "P4", "P5", "F2", "F3", "F4", "F5"]
+    assert (card["P1"]["value"], card["P1"]["verdict"]) == (10400.0, "PASS")
+    assert card["P1"]["source"] == ["P1-p16-e4-r12000-a0-202611061430"]
+    assert (card["P2"]["value"], card["P2"]["verdict"]) == (1223.0, "FAIL")
+    assert "best: 250 ms trigger, 410 ms" in card["P2"]["note"]
+    assert card["P3"]["value"] == pytest.approx(9100 / 4200 / 4, abs=1e-3) and card["P3"]["verdict"] == "PASS"  # 0.54
+    assert card["P4"]["value"] == pytest.approx(7200 / 3900 / 4, abs=1e-3) and card["P4"]["verdict"] == "FAIL"  # 0.46
+    assert (card["P5"]["value"], card["P5"]["verdict"]) == (21.0, "PASS")
+    assert (card["F2"]["value"], card["F2"]["verdict"]) == (0.021, "PASS")
+    assert card["F3"]["verdict"] == "PASS" and card["F3"]["value"] == "3 attack categories"
+    assert card["F4"]["verdict"] == "NOT RUN" and "M4-F02 AC-08" in card["F4"]["note"]
+    assert card["F5"]["verdict"] == "PASS" and len(card["F5"]["source"]) == 3
 
 
-@pytest.fixture
-def results(tmp_path):
-    e1 = bn.plan("E1")
-    write(tmp_path, "E1", [run(e1[0], capacity_rows_per_s=10_000.0), run(e1[1], capacity_rows_per_s=24_000.0)])
-    write(tmp_path, "E1", [run(e1[0], stamp="202610251300", capacity_rows_per_s=1.0)], stamp="202610251300")   # older
-    write(tmp_path, "E1", [run(e1[0], stamp="202610251500", capacity_rows_per_s=2.0)], stamp="202610251500", sub="smoke")
-    e2 = bn.plan("E2")
-    write(tmp_path, "E2", [run(e2[0], capacity_rows_per_s=6000.0), run(e2[2], capacity_rows_per_s=9000.0)])
-    lat = bn.plan("LAT")
-    write(tmp_path, "LAT", [run(lat[0], latency_p95_ms=1040.0), run(lat[1], latency_p95_ms=620.0), run(lat[2], latency_p95_ms=410.0)])
-    e3 = bn.plan("E3")
-    write(tmp_path, "E3", [dict(run(s), detection=det(sh, al)) for s, sh, al in zip(e3, (0.01, 0.03, 0.06, 1.0), (0.0, 0.0, 0.0, 1.0))])
-    p1 = run(bn.plan("P1")[0], sustained_evs=11_000.0)
-    write(tmp_path, "P1", [p1])
-    raw = tmp_path / "raw" / p1["run_id"]
-    raw.mkdir(parents=True)
-    with open(raw / "samples.csv", "w", newline="") as fh:
-        w = csv.DictWriter(fh, ["t_s", "batches", "input_evs", "capacity_median", "p95_median_ms", "p95_max_ms"])
-        w.writeheader()
-        w.writerows({"t_s": t, "batches": 30, "input_evs": 11_000 + t, "capacity_median": 15_000, "p95_median_ms": 800,
-                     "p95_max_ms": 1200} for t in range(0, 600, 30))
-    return tmp_path
+def test_lower_bound_is_unknown_and_missing_is_not_run(tmp_path):
+    RF.write(tmp_path, only={"E1"})
+    rep = json.loads((tmp_path / f"E1-{RF.STAMP}.json").read_text())
+    for r in rep["runs"]:
+        if r["level"] == "4":
+            r["summary"]["sustained_evs"], r["summary"]["producer_bound"] = 7000.0, True      # 0.42, lower bound
+    rep2 = BR.experiment_report("E1", rep["runs"], 600, 60)
+    BR.write_json(tmp_path / f"E1-{RF.STAMP}.json", rep2)
+    card = {r["id"]: r for r in A.scorecard(A.latest_reports(tmp_path), {})}
+    assert card["P3"]["verdict"] == "UNKNOWN" and "lower bound" in card["P3"]["note"]
+    assert {card[k]["verdict"] for k in ("P1", "P2", "P4", "P5", "F2", "F3", "F5")} == {"NOT RUN"}
 
 
-def test_latest_reports_ignores_older_and_smoke(results):
-    reps = an.latest_reports(results)
-    assert set(reps) == {"E1", "E2", "LAT", "E3", "P1"}
-    assert reps["E1"]["report_stem"] == "E1-202610251400"
+def test_f4_from_evidence(tmp_path):
+    card = rows(tmp_path, {"worst_case_s": 3.44, "measured": "2026-11-01", "source": "M4-F02 AC-08"})
+    assert (card["F4"]["value"], card["F4"]["verdict"]) == (3.44, "PASS")
+    card = rows(tmp_path, {"worst_case_s": 6.1, "measured": "2026-11-02", "source": "M4-F02 AC-08"})
+    assert card["F4"]["verdict"] == "FAIL"
 
 
-def test_scorecard(results):
-    card = {r["id"]: r for r in an.scorecard(an.latest_reports(results))}
-    assert card["P1"]["value"] == 11_000.0 and card["P1"]["pass"] is True
-    assert card["P2"]["value"] == 1040.0 and card["P2"]["pass"] is False
-    assert card["P2-best"]["value"] == 410.0 and card["P2-best"]["pass"] is True and "250" in card["P2-best"]["metric"]
-    assert card["P3"]["value"] == pytest.approx(0.6) and card["P3"]["pass"] is True
-    assert card["P4"]["value"] == pytest.approx(0.375) and card["P4"]["pass"] is False
-    assert card["F2"]["value"] == 0.01 and card["F2"]["pass"] is True
-    assert card["F5"]["value"] == 1.0 and card["F5"]["pass"] is True
-    assert card["P5"]["pass"] is None and card["P5"]["value"] is None and card["P5"]["note"] == "not run"
+# ---- AC-03 ----
+def test_f3_table_sums_attack_levels_and_benign_from_0(tmp_path):
+    RF.write(tmp_path, only={"E3"})
+    (_, rep), = A.latest_reports(tmp_path).values()
+    t = {r["category"]: r for r in A.f3_table(rep)}
+    assert list(t) == ["INJ_DDOS", "INJ_PORTSCAN", "INJ_SYNFLOOD", "BENIGN"]
+    ddos = t["INJ_DDOS"]                                      # 40 × (5 + 20 + 100) = 5,000 windows
+    assert ddos["windows"] == 5000 and ddos["rule"] == round((70 + 280 + 1400) / 5000, 4)
+    assert t["BENIGN"]["windows"] == 4000 and t["BENIGN"]["hybrid"] == 0.021 and t["BENIGN"]["levels"] == "0 %"
+    assert A.f3_table(None) == []
 
 
-def test_figures_and_markdown(results):
-    out = an.run(results, date="2026-10-25")
-    figs = sorted(p.name for p in (results / "analysis" / "figures").glob("*.png"))
-    assert figs == ["detection.png", "latency.png", "scaling.png", "timeline.png"]        # no REC: recovery skipped
-    md = (results / "analysis" / "RESULTS-2026-10-25.md").read_text()
-    assert "| P3 |" in md and "not run" in md and "figures/scaling.png" in md and "recovery.png" not in md
-    assert out["figures"] == 4 and out["passed"] == 5 and out["failed"] == 2
+# ---- AC-05 ----
+def test_outputs_and_determinism(tmp_path):
+    RF.write(tmp_path)
+    first = A.analyze(tmp_path)
+    out = tmp_path / "analysis"
+    files = sorted(p.relative_to(out) for p in out.rglob("*") if p.is_file())
+    blobs = {p: (out / p).read_bytes() for p in files}
+    assert first["skipped"] == [] and len(first["figures"]) == 6
+    assert {"RESULTS.md", "scorecard.json", "f3.csv"} <= {str(p) for p in files}
+    A.analyze(tmp_path)
+    assert {p: (out / p).read_bytes() for p in files} == blobs                       # byte-identical rerun
+    md = (out / "RESULTS.md").read_text()
+    assert md.startswith("# Results") and "| P3 |" in md and "![scaling](figures/scaling.png)" in md
+    assert "| INJ_DDOS |" in md and "E1-202611061430.md" in md
+
+
+def test_empty_results_dir(tmp_path):
+    res = A.analyze(tmp_path)
+    assert set(res["verdicts"].values()) == {"NOT RUN"} and res["figures"] == []
+    assert len(res["skipped"]) == 6 and (tmp_path / "analysis" / "RESULTS.md").exists()

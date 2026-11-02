@@ -1,93 +1,55 @@
-"""M4-T010 — synthetic C-04/C-05 generator (M4's mock) (M4-F01-AC-03, AC-05)."""
-import json
-
+"""M4-T013: synthetic generator (AC-09, AC-10 logic)."""
 import pytest
 
-from conftest import BASE
 from ids_contracts import metrics as M
 from ids_contracts import store as S
-from ids_contracts.config import EXIT_OK, EXIT_USAGE_ERROR
-from ids_monitor import synthetic as syn
+from ids_monitor.synthetic import generate_run, next_window_ends
 
-NOW = BASE + 3_600_000 + 4_321          # 01:00:04.321, not aligned on purpose
-
-
-def gen(**kw):
-    args = dict(now_ms=NOW, seconds=300, n_ips=20, anomaly_share=0.2, run_id="DEV-synthetic", seed=42)
-    args.update(kw)
-    return syn.generate(**args)
+from conftest import BASE, MIN
 
 
-def test_windows_are_valid_aligned_and_recent():
-    data = gen()
-    windows = data["windows"]
-    assert len(windows) == 30 * 20
-    for r in windows:
-        assert S.validate_row(r) == [], r
-        assert r["window_end"] % 10_000 == 0 and NOW - 300_000 < r["window_end"] <= NOW
-        assert r["run_id"] == "DEV-synthetic"
+def test_deterministic_for_seed_and_end():
+    a = generate_run(end_ms=BASE + 10 * MIN, seed=7, n_ips=20, n_windows=12, anomaly_share=0.2, run_id="DEV-syn")
+    b = generate_run(end_ms=BASE + 10 * MIN, seed=7, n_ips=20, n_windows=12, anomaly_share=0.2, run_id="DEV-syn")
+    c = generate_run(end_ms=BASE + 10 * MIN, seed=8, n_ips=20, n_windows=12, anomaly_share=0.2, run_id="DEV-syn")
+    assert a == b and a.windows != c.windows
 
 
-def test_exact_anomaly_share_per_window():
-    by_end = {}
-    for r in gen()["windows"]:
-        by_end.setdefault(r["window_end"], []).append(r["is_anomaly"])
-    assert all(sum(v) == 4 for v in by_end.values())          # round(0.2 × 20)
-    assert S.drift_alert(sum(sum(v) for v in by_end.values()), sum(len(v) for v in by_end.values()))
+def test_shape_and_alignment():
+    r = generate_run(end_ms=BASE + 10 * MIN + 7_123, seed=1, n_ips=10, n_windows=30, anomaly_share=0.1, run_id="DEV-syn")
+    ends = sorted({w["window_end"] for w in r.windows})
+    assert len(r.windows) == 300 and len(ends) == 30
+    assert ends[-1] == BASE + 10 * MIN and all(e % S.SLIDE_MS == 0 for e in ends)   # last full slide ≤ end
+    assert all(b - a == S.SLIDE_MS for a, b in zip(ends, ends[1:]))
+    assert len({(w["window_end"], w["src_ip"]) for w in r.windows}) == 300        # one row per key
 
 
-def test_metrics_and_run_rows_valid():
-    data = gen()
-    assert len(data["metrics"]) == 60
-    assert all(M.validate_metrics_row(m) == [] for m in data["metrics"])
-    assert [m["batch_id"] for m in data["metrics"]] == list(range(60))
-    assert M.validate_run_row(data["run"]) == [] and json.loads(data["run"]["config_json"])["synthetic"] is True
+@pytest.mark.parametrize("share", [0.0, 0.05, 0.2, 0.5, 1.0])
+def test_anomaly_share(share):
+    r = generate_run(end_ms=BASE + 10 * MIN, seed=3, n_ips=50, n_windows=30, anomaly_share=share, run_id="DEV-syn")
+    got = sum(w["is_anomaly"] for w in r.windows) / len(r.windows)
+    assert abs(got - share) <= 0.05
 
 
-def test_deterministic_by_seed():
-    assert gen() == gen()
-    a, b = gen()["windows"], gen(seed=7)["windows"]
-    assert [r["total_bytes"] for r in a] != [r["total_bytes"] for r in b]
+def test_rows_valid_and_metrics_consistent():
+    r = generate_run(end_ms=BASE + 10 * MIN, seed=5, n_ips=30, n_windows=30, anomaly_share=0.2, run_id="DEV-syn")
+    assert all(S.validate_row(w) == [] for w in r.windows)
+    assert all(M.validate_metrics_row(m) == [] for m in r.metrics)
+    assert M.validate_run_row(r.run) == []
+    assert sum(m["windows_written"] for m in r.metrics) == len(r.windows)
+    assert sum(m["anomalies_written"] for m in r.metrics) == sum(w["is_anomaly"] for w in r.windows)
+    assert all(w["run_id"] == "DEV-syn" == r.run["run_id"] for w in r.windows)
 
 
-def test_zero_share_has_no_anomalies():
-    assert not any(r["is_anomaly"] for r in gen(anomaly_share=0.0)["windows"])
+def test_bad_arguments():
+    with pytest.raises(ValueError):
+        generate_run(end_ms=BASE, seed=1, n_ips=0, n_windows=1, anomaly_share=0.1, run_id="DEV-syn")
+    with pytest.raises(ValueError):
+        generate_run(end_ms=BASE, seed=1, n_ips=1, n_windows=1, anomaly_share=1.5, run_id="DEV-syn")
+    with pytest.raises(ValueError):
+        generate_run(end_ms=BASE, seed=1, n_ips=1, n_windows=1, anomaly_share=0.1, run_id="not a run id")
 
 
-class FakeWriter:
-    def __init__(self):
-        self.windows, self.metrics, self.runs = [], [], []
-
-    def write_windows(self, rows):
-        self.windows += rows
-
-    def write_metrics(self, rows):
-        self.metrics += rows
-
-    def write_run(self, row):
-        self.runs.append(row)
-
-
-def test_follow_writes_new_windows_in_real_time():
-    clock = {"t": NOW}
-    w = FakeWriter()
-    syn.follow(w, seconds=30, n_ips=5, anomaly_share=0.2, run_id="DEV-f", seed=1,
-               now=lambda: clock["t"], sleep=lambda s: clock.__setitem__("t", clock["t"] + int(s * 1000)))
-    ends = sorted({r["window_end"] for r in w.windows})
-    assert len(ends) == 3 and all(b - a == 10_000 for a, b in zip(ends, ends[1:]))
-    assert len(w.windows) == 15 and len(w.metrics) == 6
-    assert all(S.validate_row(r) == [] for r in w.windows)
-
-
-def test_cli_writes_through_writer(capsys):
-    w = FakeWriter()
-    code = syn.main(["--seconds", "60", "--ips", "10", "--anomaly-share", "0.3", "--run-id", "DEV-cli"],
-                    env={}, writer_factory=lambda cfg: w, now=lambda: NOW)
-    s = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert code == EXIT_OK and s["windows_written"] == 60 == len(w.windows) and s["metrics_written"] == 12
-    assert s["run_id"] == "DEV-cli" and len(w.runs) == 1
-
-
-@pytest.mark.parametrize("argv", [["--anomaly-share", "1.5"], ["--ips", "0"], ["--seconds", "5"]])
-def test_cli_usage_errors(argv, capsys):
-    assert syn.main(argv, env={}, writer_factory=lambda cfg: FakeWriter(), now=lambda: NOW) == EXIT_USAGE_ERROR
+def test_next_window_ends_for_follow_mode():
+    assert next_window_ends(last_end=BASE + 30_000, now_ms=BASE + 30_000) == []
+    assert next_window_ends(last_end=BASE + 30_000, now_ms=BASE + 59_999) == [BASE + 40_000, BASE + 50_000]

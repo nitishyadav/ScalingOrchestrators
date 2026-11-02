@@ -1,100 +1,66 @@
-"""M4-T040 — dashboard view model (M4-F02-AC-01, AC-02)."""
-from conftest import BASE
+"""M4-T012: drift summary and top flagged IPs (AC-05, AC-06)."""
+import time
+
 from ids_contracts import store as S
-from ids_monitor import synthetic as syn
-from ids_monitor.view import DemoReader, build_view
+from ids_monitor.view import drift_summary, top_flagged
 
-NOW = BASE + 7_200_000 + 2_500
-
-
-def test_view_from_synthetic_data():
-    reader = DemoReader(share=0.2, n_ips=20, seed=5, clock=lambda: NOW)
-    v = build_view(reader, NOW, seconds=300)
-    assert v["run_id"] == "DEMO-synthetic" and v["has_data"]
-    metrics = reader.metrics("DEMO-synthetic", limit=60)
-    from ids_monitor.view import _median
-    assert v["kpis"]["throughput"] == _median([m["input_rows_per_sec"] for m in metrics[:10]])     # last 10 with data
-    assert v["kpis"]["latency_p95_ms"] == _median([m["latency_p95_ms"] for m in metrics[:10]])
-    assert v["kpis"]["windows"] == 30 * 20 and abs(v["kpis"]["anomaly_rate"] - 0.2) < 1e-9
-    assert v["drift"]["alert"] is True and v["drift"] == {**v["drift"], "rate": v["kpis"]["anomaly_rate"]}
-    assert len(v["rate_series"]) == 30 and all(abs(p["rate"] - 0.2) < 1e-9 for p in v["rate_series"])
-    assert [p["window_end"] for p in v["rate_series"]] == sorted(p["window_end"] for p in v["rate_series"])
-    ts = [p["batch_ts"] for p in v["latency"]]
-    assert ts == sorted(ts) and all(p["p50"] <= p["p95"] for p in v["latency"])
-    assert len(v["throughput"]) == len(v["latency"]) == 60
-    assert 0 < len(v["top"]) <= 10
+from conftest import BASE, window
 
 
-def test_view_below_threshold_has_no_alert():
-    v = build_view(DemoReader(share=0.1, n_ips=20, seed=5, clock=lambda: NOW), NOW)
-    assert v["drift"]["alert"] is False and abs(v["kpis"]["anomaly_rate"] - 0.1) < 1e-9
+def _windows(total, anomalous):
+    return [window(end=BASE + 30_000 + i * 10_000, ip=f"10.0.{i // 250}.{i % 250}", anomalous=i < anomalous)
+            for i in range(total)]
 
 
-class EmptyReader:
-    def runs(self, limit=20):
-        return []
-
-    def recent_windows(self, now_ms, seconds=300, run_id=None):
-        return []
-
-    def metrics(self, run_id, limit=60):
-        return []
+def test_drift_above_threshold():
+    d = drift_summary(_windows(100, 16))
+    assert (d.total, d.anomalous, d.alert) == (100, 16, True) and abs(d.rate - 0.16) < 1e-12
+    assert d.threshold == S.DRIFT_THRESHOLD
 
 
-def test_empty_store_renders_waiting_state():
-    v = build_view(EmptyReader(), NOW)
-    assert v["run_id"] is None and not v["has_data"]
-    assert v["kpis"] == {"throughput": None, "latency_p95_ms": None, "anomaly_rate": None, "windows": 0, "anomalous": 0}
-    assert v["throughput"] == v["latency"] == v["rate_series"] == v["top"] == []
+def test_drift_at_threshold_is_not_an_alert():
+    assert drift_summary(_windows(100, 15)).alert is False
 
 
-def test_explicit_run_and_stale_rows():
-    class OneRun(EmptyReader):
-        def runs(self, limit=20):
-            return [{"run_id": "R1", "started_at": BASE}]
-
-        def metrics(self, run_id, limit=60):
-            assert run_id == "R2"
-            return []
-
-    v = build_view(OneRun(), NOW, run_id="R2")
-    assert v["run_id"] == "R2" and v["kpis"]["anomaly_rate"] is None and v["runs"] == ["R1"]
+def test_drift_empty():
+    d = drift_summary([])
+    assert (d.total, d.anomalous, d.rate, d.alert) == (0, 0, 0.0, False)
 
 
-def test_demo_rows_are_contract_valid():
-    rows = DemoReader(share=0.2, clock=lambda: NOW).recent_windows(NOW, 120)
-    assert rows and all(S.validate_row(r) == [] for r in rows)
-    assert syn.THRESHOLD == 0.55
+def test_top_flagged_order_and_fields():
+    ws = [window(end=BASE + 30_000, ip="a", anomalous=True, score=0.7),
+          window(end=BASE + 40_000, ip="a", rule_ids="R-PORT-SCAN", score=0.2),
+          window(end=BASE + 50_000, ip="b", anomalous=True, score=0.9),
+          window(end=BASE + 60_000, ip="b", rule_ids="R-SYN-FLOOD,R-PORT-SCAN", score=0.3),
+          window(end=BASE + 70_000, ip="c", anomalous=True, score=0.95),
+          window(end=BASE + 80_000, ip="d", anomalous=False, score=0.99)]       # not flagged: excluded
+    top = top_flagged(ws, n=10)
+    assert [t.src_ip for t in top] == ["b", "a", "c"]                        # count desc, then max score desc
+    b = top[0]
+    assert (b.windows, b.max_score, b.last_seen) == (2, 0.9, BASE + 60_000)
+    assert b.rule_ids == ("R-PORT-SCAN", "R-SYN-FLOOD")
+    assert top_flagged(ws, n=1)[0].src_ip == "b"
 
 
-# ---- M4-FR-018 finished runs (AC-06) ---------------------------------------------------------------
-def test_finished_run_is_anchored_at_its_end():
-    ended = NOW - 3_600_000                                   # run ended an hour before "now"
-    reader = DemoReader(share=0.2, n_ips=20, seed=5, clock=lambda: ended)
-    auto = build_view(reader, NOW, seconds=300)
-    assert auto["has_data"] and auto["live"] is False
-    assert auto["as_of_ms"] == reader.metrics("DEMO-synthetic", limit=1)[0]["batch_ts"]
-    assert auto["kpis"]["windows"] == 30 * 20
-    now_view = build_view(reader, NOW, seconds=300, anchor="now")
-    assert now_view["kpis"]["windows"] == 0 and now_view["as_of_ms"] == NOW
+class _Guard(dict):
+    def __getitem__(self, key):
+        assert key not in S.EVAL_ONLY, f"eval-only column {key} read"
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        assert key not in S.EVAL_ONLY, f"eval-only column {key} read"
+        return super().get(key, default)
 
 
-def test_live_run_is_anchored_at_now():
-    v = build_view(DemoReader(share=0.2, n_ips=20, seed=5, clock=lambda: NOW), NOW + 2_000)
-    assert v["live"] is True and v["as_of_ms"] == NOW + 2_000
+def test_eval_only_columns_are_never_read():
+    ws = [_Guard(w) for w in _windows(50, 10)]
+    drift_summary(ws)
+    top_flagged(ws)
 
 
-def test_kpis_skip_idle_trailing_batches():
-    class Idle(EmptyReader):
-        def runs(self, limit=20):
-            return [{"run_id": "R", "started_at": BASE}]
-
-        def metrics(self, run_id, limit=60):
-            busy = {"batch_ts": NOW - 5_000, "input_rows": 2000, "input_rows_per_sec": 2000.0, "latency_p50_ms": 400.0,
-                    "latency_p95_ms": 900.0}
-            idle = {"batch_ts": NOW - 1_000, "input_rows": 0, "input_rows_per_sec": 0.0, "latency_p50_ms": None,
-                    "latency_p95_ms": None}
-            return [idle, busy]                       # newest first, as C-05 reads return
-
-    v = build_view(Idle(), NOW)
-    assert v["kpis"]["throughput"] == 2000.0 and v["kpis"]["latency_p95_ms"] == 900.0
+def test_performance_100k_windows():
+    ws = _windows(100_000, 12_000)
+    t0 = time.perf_counter()
+    drift_summary(ws)
+    top_flagged(ws, n=10)
+    assert time.perf_counter() - t0 <= 0.5                                   # NFR-002

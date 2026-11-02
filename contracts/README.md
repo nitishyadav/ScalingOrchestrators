@@ -11,7 +11,7 @@ and must be **Approved v1.0** before code is written on either side of its seam.
 | C-01 | [`C-01_network_event.md`](C-01_network_event.md) | M1 Aswin | M3, M2 | Kafka JSON + replay Parquet | **In Review 1.0.0-rc.5** |
 | C-02 | [`C-02_feature_definition.md`](C-02_feature_definition.md) | M2 Nitish | M3 | Spec + golden CSV | 🔶 **Provisional replica 0.2.0** (by M1, owner to replace) |
 | C-03 | [`C-03_detection_bundle.md`](C-03_detection_bundle.md) | M2 Nitish | M3 | File bundle | 🔶 **Provisional replica 0.2.0** (by M1, owner to replace) |
-| C-04 | [`C-04_anomaly_store.md`](C-04_anomaly_store.md) | M4 Vidhi | M3 (writer) | Cassandra CQL | 🔶 **Provisional replica 0.1.0** (by M1, owner to replace) |
+| C-04 | [`C-04_anomaly_store.md`](C-04_anomaly_store.md) | M4 Vidhi | M3 (writer) | Cassandra CQL | **In Review 1.0.0-rc.1** (key per M4-ADR-001) |
 | C-05 | [`C-05_pipeline_metrics.md`](C-05_pipeline_metrics.md) | M3 Priyanka | M4 | Cassandra CQL | 🔶 **Provisional replica 0.1.0** (by M1, owner to replace) |
 | C-06 | [`C-06_runtime_config_control.md`](C-06_runtime_config_control.md) | M1 Aswin | All | Env vars, CLI, service names | **In Review 1.0.0-rc.7** |
 | — | [`versions.md`](versions.md) | M1 (all approve) | All | Version pins | **In Review 1.0.0-rc.4** |

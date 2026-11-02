@@ -1,333 +1,231 @@
-"""`python -m ids_monitor.analyze` — M4-F04 results analysis and figures (REPLICA).
+"""Results analysis (M4-T320, M4-F04): scorecard, F3 table, figures and RESULTS.md from M4-F03 outputs.
 
-Reads the newest M4-F03 report per experiment (RESULTS_DIR/<EXP>-<stamp>.json, raw/<run_id>/*.csv) and writes
-RESULTS_DIR/analysis/RESULTS-<date>.{md,json} with a target scorecard and figures/ (scaling, latency, detection, timeline, recovery).
+    python -m ids_monitor.analyze            # reads RESULTS_DIR, writes RESULTS_DIR/analysis/
+
+Nothing is measured here. Verdicts are taken from the M4-F03 report `checks` (single source of truth).
 """
 from __future__ import annotations
 
 import argparse
-import csv
-import datetime as dt
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from ids_contracts import store as S
-from ids_contracts.config import EXIT_OK, EXIT_USAGE_ERROR, ConfigError, load_runtime_config, summary_line
+from ids_contracts.config import RuntimeConfig
 
-REPORT_RE = re.compile(r"^(E1|E2|E3|P1|LAT|REC)-(\d{12})\.json$")
-SLOT1, SLOT2 = "#2a78d6", "#eb6834"                      # dataviz reference palette, light (validated 2026-10-22)
-INK, MUTED, RULE, GRID = "#1f2328", "#59636e", "#d0d7de", "#eef1f4"
+from ids_monitor import bench_report as BR
+from ids_monitor import cli
 
-
-# ---- discovery and scorecard (AC-01, AC-02) ------------------------------------------------------
-def latest_reports(results_dir: Path) -> Dict[str, dict]:
-    newest: Dict[str, Path] = {}
-    for p in Path(results_dir).glob("*.json"):
-        m = REPORT_RE.match(p.name)
-        if m and (m.group(1) not in newest or p.name > newest[m.group(1)].name):
-            newest[m.group(1)] = p
-    return {k: json.loads(p.read_text()) for k, p in newest.items()}
+COMMAND = "ids_monitor.analyze"
+REPORT_NAME = re.compile(r"^(E1|E2|E3|P1|LAT|REC)-(\d{12})\.json$")
+VERDICT = {True: "PASS", False: "FAIL", None: "UNKNOWN"}
+P2_DEFAULT_TRIGGER = "1000"          # C-06 TRIGGER_INTERVAL default "1 second"
+F4_TARGET_S = 5.0
+F3_FIELDS = ["category", "levels", "windows", "rule", "ml", "hybrid"]
 
 
-def _ok(rep: Optional[Mapping]) -> List[dict]:
-    return [r for r in (rep or {}).get("runs", []) if r.get("status") == "ok" and r.get("summary")]
+# ---- selection (FR-060) --------------------------------------------------------------------------
+def latest_reports(results_dir: Path) -> Dict[str, Tuple[Path, Dict[str, Any]]]:
+    """Newest valid `<EXP>-<stamp>.json` per experiment, in `results_dir` itself only (not smoke/ or raw/)."""
+    best: Dict[str, Tuple[str, Path, Dict[str, Any]]] = {}
+    d = Path(results_dir)
+    if not d.is_dir():
+        return {}
+    for p in sorted(d.iterdir()):
+        m = REPORT_NAME.match(p.name)
+        if not m or not p.is_file():
+            continue
+        try:
+            rep = json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError):
+            print(f"{COMMAND}: skipping unreadable report {p.name}", file=sys.stderr)
+            continue
+        exp, stamp = m.groups()
+        if exp not in best or stamp > best[exp][0]:
+            best[exp] = (stamp, p, rep)
+    return {exp: (p, rep) for exp, (_, p, rep) in sorted(best.items())}
 
 
-def _row(id_, metric, target, value=None, unit="", passed=None, source=None, note=""):
-    return {"id": id_, "metric": metric, "target": target, "value": value, "unit": unit, "pass": passed, "source": source,
-            "note": note or ("not run" if value is None and passed is None else "")}
+def load_evidence(results_dir: Path) -> Dict[str, Any]:
+    """Measurements made outside the harness (FR-063): `evidence/F4.json` from M4-F02 AC-08."""
+    p = Path(results_dir) / "evidence" / "F4.json"
+    try:
+        return {"F4": json.loads(p.read_text())} if p.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
-def scorecard(reports: Mapping[str, dict]) -> List[dict]:
-    rows = []
-    p1 = _ok(reports.get("P1"))
-    if p1:
-        s = p1[0]["summary"]
-        rows.append(_row("P1", "Sustained throughput, 16 partitions × 4 executors", "≥ 10,000 ev/s", s["sustained_evs"], "ev/s",
-                         bool(s["sustained_evs"] and s["sustained_evs"] >= 10_000 and s["keeping_up"]), p1[0]["run_id"],
-                         f"capacity {s['capacity_rows_per_s']:,.0f} rows/s, keeping up: {s['keeping_up']}"))
-    else:
-        rows.append(_row("P1", "Sustained throughput, 16 partitions × 4 executors", "≥ 10,000 ev/s"))
-    lat = {r["spec"]["level"]: r for r in _ok(reports.get("LAT"))}
+# ---- scorecard (FR-061, FR-063) ------------------------------------------------------------------
+def _check(rep: Optional[Mapping], name: str) -> Optional[Mapping]:
+    return next((c for c in (rep or {}).get("checks", []) if c["check"] == name), None)
+
+
+def _runs(rep: Optional[Mapping], levels: Optional[Sequence[str]] = None) -> List[str]:
+    return [r["run_id"] for r in (rep or {}).get("runs", []) if levels is None or r["level"] in levels]
+
+
+def _row(rid: str, metric: str, target: str, value: Any, verdict: str, source: List[str], note: str = "") -> Dict[str, Any]:
+    return {"id": rid, "metric": metric, "target": target, "value": value, "verdict": verdict, "source": source, "note": note}
+
+
+def _from_check(rid, metric, target, rep, check_name, levels=None, note="") -> Dict[str, Any]:
+    if rep is None:
+        return _row(rid, metric, target, None, "NOT RUN", [], note)
+    c = _check(rep, check_name)
+    if c is None:
+        return _row(rid, metric, target, None, "NOT RUN", _runs(rep, levels), "level not run")
+    return _row(rid, metric, target, c["value"], VERDICT[c["passed"]], _runs(rep, levels),
+                "; ".join(x for x in (c.get("note"), note) if x))
+
+
+def scorecard(reports: Mapping[str, Tuple[Path, Mapping]], evidence: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    rep = {k: v[1] for k, v in reports.items()}
+    rows = [_from_check("P1", "Sustained throughput, 16 partitions × 4 executors", "≥ 10,000 ev/s", rep.get("P1"),
+                        "P1 sustained ev/s")]
+    lat = rep.get("LAT")
+    best = None
     if lat:
-        conf = lat.get("1000")
-        if conf:
-            v = conf["summary"]["latency_p95_ms"]
-            rows.append(_row("P2", "p95 latency at 5,000 ev/s, trigger 1 s (configured)", "< 500 ms", v, "ms",
-                             v is not None and v < 500, conf["run_id"]))
-        best = min((r for r in lat.values() if r["summary"]["latency_p95_ms"] is not None),
-                   key=lambda r: r["summary"]["latency_p95_ms"], default=None)
-        if best:
-            v = best["summary"]["latency_p95_ms"]
-            rows.append(_row("P2-best", f"p95 latency at 5,000 ev/s, best trigger ({best['spec']['level']} ms)", "< 500 ms", v, "ms",
-                             v < 500, best["run_id"], f"keeping up: {best['summary']['keeping_up']}"))
+        p95s = [(r["summary"]["p95_ms"], r["level"]) for r in lat["runs"] if (r.get("summary") or {}).get("p95_ms") is not None]
+        best = min(p95s) if p95s else None
+    rows.append(_from_check("P2", "p95 end-to-end latency at 5,000 ev/s (1 s trigger, D-01)", "< 500 ms", lat,
+                            f"P2 p95 at trigger {P2_DEFAULT_TRIGGER} ms", [P2_DEFAULT_TRIGGER],
+                            f"best: {best[1]} ms trigger, {best[0]:,.0f} ms" if best else ""))
+    rows.append(_from_check("P3", "Scaling efficiency, 1 → 4 partitions (E1)", "≥ 0.5 (min 1.5×)", rep.get("E1"),
+                            "P3 efficiency at 4", ["1", "4"]))
+    rows.append(_from_check("P4", "Scaling efficiency, 1 → 4 executors (E2)", "≥ 0.5 (min 1.5×)", rep.get("E2"),
+                            "P4 efficiency at 4", ["1", "4"]))
+    rows.append(_from_check("P5", "Recovery after a Spark worker restart", "< 30 s", rep.get("REC"), "P5 recovery"))
+    e3 = rep.get("E3")
+    rows.append(_from_check("F2", "False-positive rate, benign-only run (windows)", "< 5 %", e3,
+                            "F2 benign-only window FPR (0 %)", ["0"]))
+    table = f3_table(e3)
+    attacks = [r for r in table if r["category"] != "BENIGN" and r["windows"]]
+    rows.append(_row("F3", "Rule-only vs hybrid per attack category (online)", "Produced",
+                     f"{len(attacks)} attack categories" if e3 else None,
+                     ("PASS" if attacks else "FAIL") if e3 else "NOT RUN",
+                     _runs(e3, ["5", "20", "100"]) if e3 else [], "table in RESULTS.md and f3.csv" if attacks else ""))
+    f4 = evidence.get("F4")
+    if f4 and f4.get("worst_case_s") is not None:
+        rows.append(_row("F4", "Alert visible on the dashboard after the Cassandra write", "≤ 5 s", f4["worst_case_s"],
+                         "PASS" if f4["worst_case_s"] <= F4_TARGET_S else "FAIL", [str(f4.get("source", "M4-F02 AC-08"))],
+                         f"measured {f4.get('measured', '?')}"))
     else:
-        rows.append(_row("P2", "p95 latency at 5,000 ev/s", "< 500 ms"))
-    for id_, exp, what in (("P3", "E1", "partitions"), ("P4", "E2", "executors")):
-        chk = (reports.get(exp) or {}).get("checks", {}).get("efficiency_at_4")
-        if chk:
-            rows.append(_row(id_, f"{exp} scaling efficiency, 1 → 4 {what}", "≥ 0.5", chk["value"], "", chk["pass"], exp,
-                             f"speedup {chk['speedup']:.2f}× (minimum acceptable 1.5×: {'met' if chk['minimum_speedup_pass'] else 'not met'})"))
-        else:
-            rows.append(_row(id_, f"{exp} scaling efficiency, 1 → 4 {what}", "≥ 0.5"))
-    rec = [r for r in _ok(reports.get("REC")) if r.get("recovery")]
-    if rec:
-        v = rec[0]["recovery"]
-        rows.append(_row("P5", "Recovery after a Spark worker restart", "< 30 s", v["recovered_s"], "s", v["p5_pass"], rec[0]["run_id"],
-                         f"first batch after {v['first_batch_after_s']} s, largest gap {v['max_gap_s']} s"))
+        rows.append(_row("F4", "Alert visible on the dashboard after the Cassandra write", "≤ 5 s", None, "NOT RUN", [],
+                         "measured by M4-F02 AC-08 (live test), not the harness; put it in evidence/F4.json"))
+    if e3 is None:
+        rows.append(_row("F5", "Drift banner fires when the anomaly rate > 15 %", "Correct", None, "NOT RUN", []))
     else:
-        rows.append(_row("P5", "Recovery after a Spark worker restart", "< 30 s"))
-    e3 = {r["spec"]["level"]: r for r in _ok(reports.get("E3")) if r.get("detection")}
-    if "0" in e3:
-        v = e3["0"]["detection"]["benign"]["fpr"]
-        rows.append(_row("F2", "False-positive rate, benign-only run (windows)", "< 5 %", v, "share", v is not None and v < 0.05,
-                         e3["0"]["run_id"]))
-    else:
-        rows.append(_row("F2", "False-positive rate, benign-only run (windows)", "< 5 %"))
-    if "100" in e3:
-        v = e3["100"]["detection"]["banner"]["alert_fraction"]
-        ctx = e3.get("20", {}).get("detection", {}).get("banner", {}).get("max_share")
-        rows.append(_row("F5", "Drift banner on the all-attack load (share of 30 s samples alerting)", "fires", v, "share",
-                         bool(v and v > 0.5), e3["100"]["run_id"],
-                         "" if ctx is None else f"at 20 % injection the 300 s share peaks at {ctx:.1%} (ADR-013)"))
-    else:
-        rows.append(_row("F5", "Drift banner on the all-attack load", "fires"))
+        cs = [_check(e3, n) for n in ("F5 no drift banner at 0 %", "F5 drift banner fires at 20 %",
+                                      "F5 drift banner fires at 100 %")]
+        passed = [c["passed"] if c else None for c in cs]
+        verdict = "FAIL" if False in passed else ("PASS" if all(p is True for p in passed) else "UNKNOWN")
+        parts = []
+        if cs[0] is not None and cs[0]["value"] is not None:
+            parts.append(f"0 %: {cs[0]['value']:.0%} of samples above 15 %")
+        parts += [f"{lv} %: max {c['value']:.0%}" for lv, c in zip(("20", "100"), cs[1:]) if c and c["value"] is not None]
+        value = "; ".join(parts) or None
+        rows.append(_row("F5", "Drift banner fires when the anomaly rate > 15 %", "Correct", value, verdict,
+                         _runs(e3, ["0", "20", "100"]), "no banner at 0 %, banner at 20 % and 100 % (ADR-013)"))
     return rows
 
 
-# ---- figures (AC-03) -----------------------------------------------------------------------------
-def _plt():
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    plt.rcParams.update({"axes.edgecolor": RULE, "axes.labelcolor": INK, "text.color": INK, "xtick.color": MUTED,
-                         "ytick.color": MUTED, "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
-                         "axes.spines.top": False, "axes.spines.right": False, "axes.axisbelow": True, "font.size": 9,
-                         "axes.titlesize": 10, "axes.titleweight": "bold", "axes.titlelocation": "left",
-                         "lines.linewidth": 2, "lines.markersize": 6, "legend.frameon": False, "figure.dpi": 150,
-                         "savefig.bbox": "tight", "figure.facecolor": "white", "axes.facecolor": "white"})
-    return plt
-
-
-def _target(ax, y, label, horizontal=True):
-    (ax.axhline if horizontal else ax.axvline)(y, color=MUTED, linestyle="--", linewidth=1)
-    if horizontal:
-        ax.annotate(label, (1, y), xycoords=("axes fraction", "data"), xytext=(-2, 3), textcoords="offset points",
-                    ha="right", va="bottom", color=MUTED, fontsize=8)
-
-
-def _read_csv(path: Path) -> List[dict]:
-    if not path.is_file():
+# ---- F3 (FR-062) ---------------------------------------------------------------------------------
+def f3_table(e3: Optional[Mapping]) -> List[Dict[str, Any]]:
+    """Per category, flagged / windows summed over the attack levels (5, 20, 100 %); BENIGN from the 0 % level (FPR)."""
+    if not e3:
         return []
-    with open(path) as fh:
-        return [{k: (float(v) if v not in ("", None) and k != "run_id" else v) for k, v in r.items()} for r in csv.DictReader(fh)]
+    acc: Dict[str, Dict[str, Any]] = {}
+    for r in e3.get("runs", []):
+        for c in ((r.get("detection") or {}).get("by_category") or []):
+            if (c["category"] == "BENIGN") != (r["level"] == "0"):
+                continue
+            a = acc.setdefault(c["category"], {"windows": 0, "rule": 0, "ml": 0, "hybrid": 0, "levels": []})
+            a["windows"] += c["windows"]
+            for d in ("rule", "ml", "hybrid"):
+                a[d] += c[f"{d}_flagged"]
+            a["levels"].append(r["level"])
+    out = []
+    for cat in sorted(acc, key=lambda c: (c == "BENIGN", c)):
+        a = acc[cat]
+        out.append({"category": cat, "levels": ", ".join(f"{lv} %" for lv in sorted(set(a["levels"]), key=int)),
+                    "windows": a["windows"],
+                    **{d: round(a[d] / a["windows"], 4) if a["windows"] else None for d in ("rule", "ml", "hybrid")}})
+    return out
 
 
-def fig_scaling(plt, reports, path) -> bool:
-    panels = [(e, reports[e]) for e in ("E1", "E2") if reports.get(e, {}).get("efficiency")]
-    if not panels:
-        return False
-    fig, axes = plt.subplots(1, len(panels), figsize=(3.8 * len(panels), 3.0), squeeze=False)
-    for ax, (exp, rep) in zip(axes[0], panels):
-        eff = [e for e in rep["efficiency"] if e["capacity"] is not None]
-        n = [e["n"] for e in eff]
-        cap = [e["capacity"] for e in eff]
-        base = cap[0] / n[0]
-        ax.plot(n, [base * k for k in n], color=MUTED, linestyle="--", linewidth=1, label="Ideal (linear)")
-        ax.plot(n, cap, color=SLOT1, marker="o", label="Measured capacity")
-        for e in eff[1:]:
-            ax.annotate(f"eff {e['efficiency']:.2f}", (e["n"], e["capacity"]), xytext=(4, -12), textcoords="offset points",
-                        fontsize=8, color=MUTED)
-        ax.set_xscale("log", base=2)
-        ax.set_xticks(n, [str(k) for k in n])
-        ax.minorticks_off()
-        ax.set_ylim(0, max(max(cap), base * n[-1]) * 1.1)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v / 1000:,.0f}k"))
-        ax.set_xlabel("Kafka partitions" if exp == "E1" else "Spark executors")
-        ax.set_ylabel("Capacity (rows/s)")
-        ax.set_title(f"{exp}: capacity vs {'partitions' if exp == 'E1' else 'executors'}")
-    axes[0][0].legend(loc="upper left")
-    fig.tight_layout()
-    fig.savefig(path)
-    plt.close(fig)
-    return True
-
-
-def fig_latency(plt, reports, path) -> bool:
-    runs = sorted(_ok(reports.get("LAT")), key=lambda r: -int(r["spec"]["level"]))
-    if not runs:
-        return False
-    labels = [f"{r['spec']['level']} ms" for r in runs]
-    x = range(len(runs))
-    fig, ax = plt.subplots(figsize=(5.2, 3.0))
-    ax.plot(x, [r["summary"]["latency_p95_ms"] for r in runs], color=SLOT1, marker="o", label="Median per-batch p95")
-    ax.plot(x, [r["summary"]["latency_p95_worst_ms"] for r in runs], color=SLOT2, marker="o", label="Worst per-batch p95 (95th pct)")
-    ax.plot(x, [r["summary"]["batch_duration_ms"] for r in runs], color=MUTED, marker="o", linewidth=1, label="Median batch duration")
-    _target(ax, 500, "P2 target 500 ms")
-    ax.set_xticks(list(x), labels)
-    ax.set_xlabel("Trigger interval")
-    ax.set_ylabel("Milliseconds")
-    ax.set_ylim(0, None)
-    ax.set_title("LAT: latency by trigger interval (5,000 ev/s)")
-    ax.legend(loc="upper right", fontsize=8)
-    fig.savefig(path)
-    plt.close(fig)
-    return True
-
-
-def fig_detection(plt, reports, path) -> bool:
-    runs = sorted((r for r in _ok(reports.get("E3")) if r.get("detection")), key=lambda r: r["spec"]["share"])
-    if not runs:
-        return False
-    x = range(len(runs))
-    fig, ax = plt.subplots(figsize=(5.2, 3.0))
-    ax.plot(x, [r["detection"]["anomalous_share"] * 100 for r in runs], color=SLOT1, marker="o", label="Anomalous windows, whole run")
-    ax.plot(x, [(r["detection"]["banner"]["max_share"] or 0) * 100 for r in runs], color=SLOT2, marker="o",
-            label="Banner metric, max over 300 s windows")
-    _target(ax, S.DRIFT_THRESHOLD * 100, "banner threshold 15 %")
-    ax.set_xticks(list(x), [f"{r['spec']['level']} %" for r in runs])
-    ax.set_xlabel("Injected attack share")
-    ax.set_ylabel("Share of windows (%)")
-    ax.set_ylim(0, 105)
-    ax.set_title("E3: anomalous-window share vs attack share")
-    ax.legend(loc="upper left", fontsize=8)
-    fig.savefig(path)
-    plt.close(fig)
-    return True
-
-
-def fig_timeline(plt, results_dir, reports, path) -> bool:
-    runs = _ok(reports.get("P1"))
-    rows = _read_csv(Path(results_dir) / "raw" / runs[0]["run_id"] / "samples.csv") if runs else []
-    if not rows:
-        return False
-    t = [r["t_s"] for r in rows]
-    fig, (a1, a2) = plt.subplots(2, 1, figsize=(6.4, 4.4), sharex=True)
-    a1.plot(t, [r["input_evs"] for r in rows], color=SLOT1)
-    _target(a1, 10_000, "P1 target 10,000 ev/s")
-    a1.set_ylim(0, None)
-    a1.set_ylabel("Input (ev/s)")
-    a1.set_title(f"P1: 30 s samples, {runs[0]['spec']['rate']:,} ev/s offered, 16 partitions × 4 executors")
-    a2.plot(t, [r["p95_median_ms"] for r in rows], color=SLOT1, label="Median per-batch p95")
-    a2.plot(t, [r["p95_max_ms"] for r in rows], color=SLOT2, label="Max per-batch p95")
-    _target(a2, 500, "P2 target 500 ms")
-    a2.set_ylim(0, None)
-    a2.set_ylabel("Latency (ms)")
-    a2.set_xlabel("Seconds since producer start")
-    a2.legend(loc="upper right", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(path)
-    plt.close(fig)
-    return True
-
-
-def fig_recovery(plt, results_dir, reports, path) -> bool:
-    runs = [r for r in _ok(reports.get("REC")) if r.get("recovery")]
-    rows = _read_csv(Path(results_dir) / "raw" / runs[0]["run_id"] / "metrics.csv") if runs else []
-    if not rows:
-        return False
-    start, rec = runs[0]["times_ms"]["producer_start"], runs[0]["recovery"]
-    pts = [((r["batch_ts"] - start) / 1000, r["latency_p95_ms"]) for r in rows if r["latency_p95_ms"] not in ("", None)]
-    xs, ys = [], []
-    for i, (x, y) in enumerate(pts):                  # break the line where no batch ran (no fake interpolation)
-        if i and x - pts[i - 1][0] > 3:
-            xs.append(float("nan"))
-            ys.append(float("nan"))
-        xs.append(x)
-        ys.append(y)
-    fig, ax = plt.subplots(figsize=(6.4, 3.0))
-    ax.plot(xs, ys, color=SLOT1, linewidth=1.5, marker="o", markersize=2.5)
-    rs = (rec["restart_ms"] - start) / 1000
-    ax.axvline(rs, color=MUTED, linestyle="--", linewidth=1)
-    ax.annotate("worker restart", (rs, 1), xycoords=("data", "axes fraction"), xytext=(4, -12), textcoords="offset points",
-                color=MUTED, fontsize=8)
-    if rec["recovered_s"] is not None:
-        ax.axvspan(rs, rs + rec["recovered_s"], color=SLOT2, alpha=0.12, linewidth=0)
-        ax.annotate(f"recovered after {rec['recovered_s']:.1f} s", (rs + rec["recovered_s"], 1), xycoords=("data", "axes fraction"),
-                    xytext=(4, -26), textcoords="offset points", color=INK, fontsize=8)
-    ax.set_yscale("log")
-    ax.set_xlabel("Seconds since producer start")
-    ax.set_ylabel("Per-batch p95 latency (ms, log)")
-    ax.set_title("REC: latency through a Spark worker restart (5,000 ev/s)")
-    fig.savefig(path)
-    plt.close(fig)
-    return True
-
-
-def figures(results_dir: Path, reports: Mapping[str, dict], fig_dir: Path) -> List[str]:
-    plt = _plt()
-    fig_dir.mkdir(parents=True, exist_ok=True)
-    made = []
-    for name, fn in (("scaling", lambda p: fig_scaling(plt, reports, p)), ("latency", lambda p: fig_latency(plt, reports, p)),
-                     ("detection", lambda p: fig_detection(plt, reports, p)),
-                     ("timeline", lambda p: fig_timeline(plt, results_dir, reports, p)),
-                     ("recovery", lambda p: fig_recovery(plt, results_dir, reports, p))):
-        if fn(fig_dir / f"{name}.png"):
-            made.append(name)
-    return made
-
-
-# ---- report --------------------------------------------------------------------------------------
-def _fmt(r: Mapping) -> str:
-    v = r["value"]
+# ---- RESULTS.md (FR-065) -------------------------------------------------------------------------
+def _v(v: Any) -> str:
     if v is None:
         return "—"
-    if r["unit"] == "share":
-        return f"{v:.2%}"
-    if r["unit"] in ("ev/s", "ms"):
-        return f"{v:,.0f} {r['unit']}"
-    if r["unit"] == "s":
-        return f"{v:.1f} s"
-    return f"{v:.2f}"
+    if isinstance(v, float):
+        return f"{v:,.0f}" if abs(v) >= 100 else f"{v:.3g}"
+    return str(v)
 
 
-def report_markdown(card: Sequence[Mapping], reports: Mapping[str, dict], figs: Sequence[str], date: str) -> str:
-    mark = {True: "✅ PASS", False: "❌ FAIL", None: "⬜"}
-    lines = [f"# Benchmark results ({date})", "",
-             "Generated by `python -m ids_monitor.analyze` from the newest M4-F03 report per experiment. Latency follows D-01 "
-             "(`detected_at − max_event_ts` per written window, p95 per micro-batch, median over steady-state batches).", "",
-             "## Scorecard", "", "| ID | Metric | Target | Value | Result | Source | Note |", "|---|---|---|---|---|---|---|"]
-    lines += [f"| {r['id']} | {r['metric']} | {r['target']} | {_fmt(r)} | {mark[r['pass']]} | {('`' + r['source'] + '`') if r['source'] else '—'} | {r['note']} |"
-              for r in card]
-    lines += ["", "## Reports used", ""]
-    lines += [f"- {k}: `{v['report_stem']}.md` ({len(v['runs'])} runs, {v['duration_s']} s each)" for k, v in sorted(reports.items())]
-    titles = {"scaling": "Scaling (E1, E2)", "latency": "Latency by trigger (LAT)", "detection": "Detection vs attack share (E3)",
-              "timeline": "Throughput and latency over time (P1)", "recovery": "Recovery (REC)"}
-    for f in figs:
-        lines += ["", f"## {titles[f]}", "", f"![{titles[f]}](figures/{f}.png)"]
+ICON = {"PASS": "✅ PASS", "FAIL": "❌ FAIL", "UNKNOWN": "➖ UNKNOWN", "NOT RUN": "⬜ NOT RUN"}
+
+
+def results_markdown(card, f3, reports, figures, skipped) -> str:
+    lines = ["# Results — success metrics", "",
+             "Generated by `python -m ids_monitor.analyze` (M4-F04) from the newest M4-F03 report per experiment. "
+             "Method: M4-ADR-002. Verdicts are the M4-F03 report checks.", "",
+             "| ID | Metric | Target | Value | Verdict | Source runs | Note |", "|---|---|---|---|---|---|---|"]
+    for r in card:
+        src = "<br>".join(f"`{s}`" for s in r["source"]) or "—"
+        lines.append(f"| {r['id']} | {r['metric']} | {r['target']} | {_v(r['value'])} | {ICON[r['verdict']]} | {src} | {r['note']} |")
+    lines += ["", "F1 (IF precision/recall on held-out days) is an offline M2 result and is reported by M2-F03.", ""]
+    lines += ["## F3 — rule-only vs ML-only vs hybrid (online, E3)", ""]
+    if f3:
+        lines += ["Share of windows each detector flags: recall for attack categories (5, 20, 100 % levels together), "
+                  "false-positive rate for benign windows (0 % level).", "",
+                  "| Category | Levels | Windows | Rule-only | ML-only | Hybrid |", "|---|---|---|---|---|---|"]
+        for r in f3:
+            lines.append(f"| {r['category']} | {r['levels']} | {r['windows']:,} | {r['rule']:.1%} | {r['ml']:.1%} | {r['hybrid']:.1%} |")
+    else:
+        lines.append("E3 not run.")
+    lines += ["", "## Figures", ""]
+    for name in figures:
+        lines += [f"![{name}](figures/{name}.png)", ""]
+    if skipped:
+        lines += ["Skipped figures:", ""] + [f"- **{s['figure']}**: {s['reason']}" for s in skipped] + [""]
+    lines += ["## Experiment reports", ""]
+    if reports:
+        lines += [f"- {exp}: [`{p.name.replace('.json', '.md')}`](../{p.name.replace('.json', '.md')})" for exp, (p, _) in reports.items()]
+    else:
+        lines.append("No M4-F03 reports found.")
     return "\n".join(lines) + "\n"
 
 
-def run(results_dir: Path, date: Optional[str] = None) -> dict:
-    date = date or dt.date.today().isoformat()
+def analyze(results_dir: Path) -> Dict[str, Any]:
+    from ids_monitor import figures as F
     results_dir = Path(results_dir)
-    reports = latest_reports(results_dir)
-    card = scorecard(reports)
     out = results_dir / "analysis"
-    figs = figures(results_dir, reports, out / "figures")
-    (out / f"RESULTS-{date}.json").write_text(json.dumps({"date": date, "scorecard": card,
-                                                           "reports": {k: v["report_stem"] for k, v in reports.items()}}, indent=2) + "\n")
-    (out / f"RESULTS-{date}.md").write_text(report_markdown(card, reports, figs, date))
-    return {"report": str(out / f"RESULTS-{date}.md"), "experiments": sorted(reports), "figures": len(figs),
-            "passed": sum(1 for r in card if r["pass"] is True), "failed": sum(1 for r in card if r["pass"] is False),
-            "not_run": sum(1 for r in card if r["pass"] is None)}
+    reports = latest_reports(results_dir)
+    card = scorecard(reports, load_evidence(results_dir))
+    f3 = f3_table(reports.get("E3", (None, None))[1])
+    figs, skipped = F.build_all(reports, results_dir)
+    names = [n for n in F.NAMES if n in figs]
+    for n in names:
+        F.save(figs[n], out / "figures", n)
+    BR.write_json(out / "scorecard.json", card)
+    BR.write_csv(out / "f3.csv", f3, F3_FIELDS)
+    (out / "RESULTS.md").write_text(results_markdown(card, f3, reports, names, skipped))
+    return {"experiments": list(reports), "verdicts": {r["id"]: r["verdict"] for r in card}, "figures": names,
+            "skipped": [s["figure"] for s in skipped], "results_md": str(out / "RESULTS.md")}
 
 
-def main(argv: Optional[Sequence[str]] = None, env: Optional[Mapping[str, str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="python -m ids_monitor.analyze", description="M4-F04 results analysis (replica).")
-    p.add_argument("--results-dir", type=Path, help="default RESULTS_DIR")
-    args = p.parse_args(argv)
-    try:
-        cfg = load_runtime_config(env=env)
-    except ConfigError as exc:
-        print(f"config error: {exc}", file=sys.stderr)
-        return EXIT_USAGE_ERROR
-    out = run(args.results_dir or cfg.results_dir)
-    print(summary_line("analyze", cfg.run_id, **out))
-    return EXIT_OK
+# ---- CLI (FR-066) --------------------------------------------------------------------------------
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    argparse.ArgumentParser(prog=f"python -m {COMMAND}",
+                            description="M4-F04: scorecard, F3 table and report figures from M4-F03 results "
+                                        "(RESULTS_DIR → RESULTS_DIR/analysis/).").parse_args(argv)
+
+    def handler(cfg: RuntimeConfig) -> Dict[str, Any]:
+        return analyze(Path(cfg.results_dir))
+
+    return cli.run(COMMAND, handler)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | **Proposed (replica)**. The owner, M4 (Vidhi), accepts or replaces it |
+| Status | **Accepted** by the owner, M4 (Vidhi), 2026-11-01 |
 | Date | 2026-10-25 |
 | Deciders | M4 owner, with M1 and M3 (drafted by Aswin, M1, in replica mode) |
 | Resolves | D-12 |

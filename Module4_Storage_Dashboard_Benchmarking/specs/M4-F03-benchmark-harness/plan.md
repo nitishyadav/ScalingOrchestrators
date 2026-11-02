@@ -1,28 +1,48 @@
-# Plan: M4-F03 — Benchmark Harness (REPLICA)
+# Plan: M4-F03 — Benchmark harness
 
 | Field | Value |
 |---|---|
-| Status | **Approved** (replica) |
-| Stack | Standard library (`subprocess`, `signal`, `statistics`), cassandra-driver via M4-F01 `StoreReader`. No new dependencies |
+| Spec | 1.0.0 (Approved 2026-11-01) |
+| Status | **Approved** |
+| Stack | Standard library only (`subprocess`, `signal`, `statistics`, `csv`, `json`). C-05/C-04 via M4-F01 `Store`. No new dependency |
 
-## Design
-| Component | File | Notes |
+## 1. Components
+| File | Contents | Pure? |
 |---|---|---|
-| Plans | `bench.EXPERIMENTS`, `RunSpec`, `plan(experiment, levels, stamp)` | Pure. Run IDs per C-06 §6 |
-| Metric maths | `summarize_metrics`, `samples`, `efficiency`, `detection`, `recovery` | Pure functions over C-05 / C-04 dict rows (epoch ms) |
-| Orchestration | `Runner(cli, store, clock, results_dir)` | `cli` = subprocess adapter (fake in tests). `store` = `StoreReader`-like |
-| Output | `write_raw`, `experiment_report` | JSON + CSV + Markdown |
-| CLI | `main()` → `python -m ids_monitor.bench` | Last stdout line = C-06 summary (`runs`, `results_dir`) |
+| `src/ids_monitor/bench_plan.py` | `EXPERIMENTS` (§5 table), `RunSpec`, `plan(exp, levels)`, `run_id(spec, stamp)`, `commands(spec, run_id, duration, budget_s)` | yes |
+| `src/ids_monitor/bench_math.py` | `steady`, `summarize` (FR-043/044), `samples` (FR-045), `efficiency` (FR-046), `detection` + `banner` (FR-047), `recovery` (FR-048) | yes |
+| `src/ids_monitor/bench_report.py` | `write_raw(dir, …)` (FR-049), `experiment_report(…)` → dict, `report_markdown(dict)`, `checks(exp, runs)` | file I/O only |
+| `src/ids_monitor/bench.py` | adapters (`SubprocessCli`, `SystemClock`), `Runner` (FR-042, 050), `main()` (FR-051) | no |
 
-## Run sequence (one level)
-1. `ids_ingest.topic_admin --partitions P --recreate` (M1)
-2. `ids_stream.job --executors E --trigger T --run-id RID --await-seconds <budget> --starting-offsets earliest` (M3, background)
-3. Wait for the `ids.runs` row of RID (≤ 180 s), plus 10 s for the query to start
-4. `ids_ingest.producer --days Monday --rate R --duration D --run-id RID [--attack-mode mixed --attack-share S]` (M1, background). REC: at D/2,
-   `ids_ingest.platform restart-worker --index 1`
-5. Drain: poll C-05 until the newest input batch is ≥ 8 s old (≤ 120 s)
-6. SIGINT to the job wrapper (it SIGTERMs the driver, S-053). Wait ≤ 120 s, then a second SIGINT
-7. Collect C-05 (+ C-04 for E3) → maths → raw files
+## 2. Adapters (NFR-021)
+- **cli:** `run(argv, log) → (exit_code, summary_dict | None)` for short commands; `start(argv, log) → handle` with `poll()`, `wait(timeout)`,
+  `interrupt()` (SIGINT), `kill()`, `summary()` for the job and the producer. Commands are `[sys.executable, "-m", module, *flags]`,
+  run from the workspace root with the parent environment (C-06 config is read by each CLI itself).
+- **store:** `latest_runs`, `latest_metrics(run_id, limit)`, `read_windows(start, end, run_id)` (M4-F01 `Store`).
+- **clock:** `now_ms()`, `sleep(s)`. Tests use a fake clock that advances on `sleep`, and a fake CLI that writes C-05 rows into a fake store.
 
-## Budget
-16 runs × (D + about 90 s overhead): at D = 600 s, about 3 h. Run it in the background with no other heavy work, since the host CPU is shared with the Colima VM.
+## 3. Level sequence (FR-042)
+| Step | Action | Timeout |
+|---|---|---|
+| 1 | `ids_ingest.topic_admin --partitions P --recreate` | 120 s |
+| 2 | start `ids_stream.job --executors E --trigger T --run-id RID --await-seconds <D + 600>` | — |
+| 3 | poll `runs` for RID every 2 s, then sleep 10 s | 180 s |
+| 4 | start `ids_ingest.producer --source replay --days Monday --rate R --duration D --run-id RID --seed 42 [--attack-mode mixed --attack-share S]` | — |
+| 5 | REC: at D/2, `ids_ingest.platform restart-worker --index 1` | 180 s |
+| 6 | wait for the producer | D + 120 s |
+| 7 | drain: poll metrics every 2 s until the newest input batch is ≥ 10 s old | 120 s |
+| 8 | SIGINT job; second SIGINT after 120 s; kill after 30 s more | 150 s |
+| 9 | collect metrics (limit 100,000), windows (E3), compute, write raw | — |
+
+Ctrl-C at any step: interrupt producer and job (step 8 logic), collect, mark `interrupted`, stop.
+
+## 4. Raw layout (FR-049)
+`results/raw/<RID>/{config.json, commands.json, topic_admin.json, job.json, producer.json, restart.json, *.log, metrics.csv, samples.csv, summary.json, detection.json, recovery.json}`
+and `results/<EXP>-<YYYYMMDDHHMM>.{json,md}`.
+
+## 5. Risks
+| Risk | Mitigation |
+|---|---|
+| Producer cannot reach 15,000 ev/s | `producer_bound` flag, ADR-002 interpretation rules |
+| Full run ≈ 3.5 h | `--levels` smoke first; run in the background, platform otherwise idle |
+| M3 replica job replaced at integration | Only C-06 flags used; preflight `--help` check |

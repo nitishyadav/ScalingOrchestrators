@@ -1,219 +1,112 @@
-"""Cassandra access for C-04 (`ids.window_scores`) and C-05 (`ids.pipeline_metrics`, `ids.runs`) — M4-F01 (REPLICA).
+"""Read and write the C-04 / C-05 tables (M4-T022, M4-FR-004/005/008/009).
 
-Timestamps cross this API as epoch milliseconds (ints). Reads use partition-key queries only (no ALLOW FILTERING).
+Rows are plain dicts with timestamps as epoch ms, exactly as `ids_contracts` validates them.
+Window reads use only partition-key queries, one per 5-minute bucket (C-04 §5, M4-ADR-001).
 """
 from __future__ import annotations
 
 import calendar
-import collections
 import datetime as dt
-import re
-from typing import Dict, Iterable, List, Mapping, Optional, Tuple
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from cassandra.policies import AddressTranslator
-
-from ids_contracts import SCHEMAS_DIR
 from ids_contracts import metrics as M
 from ids_contracts import store as S
 
-HOUR_MS = 3_600_000
-_UTC = dt.timezone.utc
-_EPOCH = dt.datetime(1970, 1, 1, tzinfo=_UTC)
-SCHEMA_FILES = (SCHEMAS_DIR / "ids_schema.cql", SCHEMAS_DIR / "metrics_schema.cql")
-WINDOW_INSERT_COLUMNS = tuple(c for c, _ in S.COLUMNS)
-METRICS_INSERT_COLUMNS = tuple(c for c, _ in M.METRICS_COLUMNS)
-RUN_INSERT_COLUMNS = tuple(c for c, _ in M.RUNS_COLUMNS)
-TIMESTAMP_COLUMNS = frozenset(c for c, t in S.COLUMNS + M.METRICS_COLUMNS + M.RUNS_COLUMNS if t == "timestamp")
-EXPECTED_TABLES = {S.TABLE: S.COLUMNS, M.METRICS_TABLE: M.METRICS_COLUMNS, M.RUNS_TABLE: M.RUNS_COLUMNS}
-
-WINDOWS_QUERY = (f"SELECT * FROM {S.KEYSPACE}.{S.TABLE} "
-                 "WHERE date_bucket = %s AND hour = %s AND window_end >= %s AND window_end <= %s")
-METRICS_QUERY = f"SELECT * FROM {M.KEYSPACE}.{M.METRICS_TABLE} WHERE run_id = %s LIMIT %s"
-RUNS_QUERY = f"SELECT * FROM {M.KEYSPACE}.{M.RUNS_TABLE} WHERE bucket = %s LIMIT %s"
-COLUMNS_QUERY = "SELECT table_name, column_name, type FROM system_schema.columns WHERE keyspace_name = %s"
+_TS = {c for c, t in (*S.COLUMNS, *M.METRICS_COLUMNS, *M.RUNS_COLUMNS) if t == "timestamp"}
 
 
-class StoreUnavailable(RuntimeError):
-    """Cassandra cannot be reached (exit code 1)."""
-
-
-# ---- pure helpers ------------------------------------------------------------------------------
-def split_statements(cql: str) -> List[str]:
-    text = re.sub(r"--[^\n]*", "", cql)
-    return [" ".join(s.split()) for s in text.split(";") if s.strip()]
-
-
-def ms_to_dt(ms: int) -> dt.datetime:
-    return _EPOCH + dt.timedelta(milliseconds=ms)
-
-
-def dt_to_ms(value: dt.datetime) -> int:
+def to_ms(value: Any) -> Optional[int]:
+    """Driver timestamp (naive UTC datetime, or aware) → epoch ms. Ints pass through."""
+    if value is None or isinstance(value, int):
+        return value
     if value.tzinfo is not None:
-        value = value.astimezone(_UTC)
+        value = value.astimezone(dt.timezone.utc)
     return calendar.timegm(value.utctimetuple()) * 1000 + value.microsecond // 1000
 
 
-def row_to_dict(row: Mapping) -> dict:
-    return {k: dt_to_ms(v) if isinstance(v, dt.datetime) else v for k, v in dict(row).items()}
+def current_ms() -> int:
+    return int(time.time() * 1000)
 
 
-def partitions_between(start_ms: int, end_ms: int) -> List[Tuple[str, int]]:
-    """C-04 (date_bucket, hour) partitions whose hour overlaps [start_ms, end_ms]."""
-    out, h = [], (start_ms // HOUR_MS) * HOUR_MS
-    while h <= end_ms:
-        out.append(S.partition_key(h))
-        h += HOUR_MS
-    return out
+def _from_driver(row: Mapping[str, Any]) -> Dict[str, Any]:
+    return {k: (to_ms(v) if k in _TS else v) for k, v in row.items()}
 
 
-def drift_summary(rows: Iterable[Mapping]) -> dict:
-    rows = list(rows)
-    anomalous = sum(1 for r in rows if r["is_anomaly"])
-    total = len(rows)
-    return {"total": total, "anomalous": anomalous, "rate": anomalous / total if total else 0.0,
-            "alert": S.drift_alert(anomalous, total)}
+@dataclass(frozen=True)
+class ReadResult:
+    rows: List[Dict[str, Any]]                             # newest window_end first
+    invalid: int                                           # live rows skipped because validate_row failed
+    partitions: int                                        # partition-key queries issued
 
 
-def aggregate_top(rows: Iterable[Mapping], n: int = 10) -> List[dict]:
-    agg: Dict[str, dict] = {}
-    for r in rows:
-        if not r["is_anomaly"]:
-            continue
-        a = agg.setdefault(r["src_ip"], {"src_ip": r["src_ip"], "anomalous_windows": 0, "max_score": float("-inf"),
-                                         "last_seen": 0, "_rules": set()})
-        a["anomalous_windows"] += 1
-        a["max_score"] = max(a["max_score"], r["anomaly_score"])
-        a["last_seen"] = max(a["last_seen"], r["window_end"])
-        a["_rules"].update(x for x in (r.get("rule_ids") or "").split(",") if x)
-    top = sorted(agg.values(), key=lambda a: (-a["anomalous_windows"], -a["max_score"], a["src_ip"]))[:n]
-    for a in top:
-        a["rule_ids"] = ",".join(sorted(a.pop("_rules")))
-    return top
+class Store:
+    def __init__(self, session: Any, keyspace: str = S.KEYSPACE):
+        self._session = session
+        self._ks = keyspace
+        self._prepared: Dict[str, Any] = {}
 
+    # ---- statements ----
+    def _stmt(self, query: str):
+        if query not in self._prepared:
+            from cassandra import ConsistencyLevel
+            p = self._session.prepare(query)
+            p.consistency_level = ConsistencyLevel.LOCAL_ONE                  # C-04 §2: reads and writes
+            self._prepared[query] = p
+        return self._prepared[query]
 
-# ---- connection and schema ---------------------------------------------------------------------
-class _ToContactPoint(AddressTranslator):
-    """Single node: Cassandra advertises its in-container IP; always route back to the contact point we can reach."""
+    # ---- C-04 reads ----
+    def read_windows(self, start_ms: int, end_ms: int, run_id: Optional[str] = None) -> ReadResult:
+        """Rows with window_end in [start_ms, end_ms], optionally only `run_id` (filtered client-side)."""
+        stmt = self._stmt(f"SELECT * FROM {self._ks}.{S.TABLE} WHERE date_bucket = ? AND bucket = ? "
+                          f"AND window_end >= ? AND window_end <= ?")
+        keys = S.partition_keys(start_ms, end_ms)
+        rows: List[Dict[str, Any]] = []
+        invalid = 0
+        for date_bucket, bucket in keys:                    # newest partition first, rows newest first within
+            for raw in self._session.execute(stmt, (date_bucket, bucket, start_ms, end_ms)):
+                row = _from_driver(raw)
+                if S.validate_row(row):
+                    invalid += 1
+                elif run_id is None or row["run_id"] == run_id:
+                    rows.append(row)
+        rows.sort(key=lambda r: (-r["window_end"], r["src_ip"]))
+        return ReadResult(rows, invalid, len(keys))
 
-    def __init__(self, host: str):
-        self.host = host
+    def read_recent(self, seconds: int = S.DRIFT_WINDOW_S, now_ms: Optional[int] = None,
+                    run_id: Optional[str] = None) -> ReadResult:
+        end = current_ms() if now_ms is None else now_ms
+        return self.read_windows(end - seconds * 1000, end, run_id)
 
-    def translate(self, addr):
-        return self.host
+    # ---- C-05 reads ----
+    def latest_metrics(self, run_id: str, limit: int = 60) -> List[Dict[str, Any]]:
+        stmt = self._stmt(f"SELECT * FROM {self._ks}.{M.METRICS_TABLE} WHERE run_id = ? LIMIT ?")
+        return [_from_driver(r) for r in self._session.execute(stmt, (run_id, limit))]
 
+    def latest_runs(self, limit: int = 20) -> List[Dict[str, Any]]:
+        stmt = self._stmt(f"SELECT * FROM {self._ks}.{M.RUNS_TABLE} WHERE bucket = ? LIMIT ?")
+        return [_from_driver(r) for r in self._session.execute(stmt, (M.RUNS_BUCKET, limit))]
 
-def connect(cfg, timeout_s: float = 5.0):
-    from cassandra import ConsistencyLevel
-    from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile, NoHostAvailable
-    from cassandra.policies import RoundRobinPolicy
-    from cassandra.query import dict_factory
+    # ---- writes (validated first; nothing is sent if any row is invalid) ----
+    def _write(self, table: str, columns, rows: Iterable[Mapping[str, Any]], validate) -> int:
+        rows = list(rows)
+        for i, row in enumerate(rows):
+            errors = validate(row)
+            if errors:
+                raise ValueError(f"{table} row {i} violates the contract: {'; '.join(errors)}")
+        names = [c for c, _ in columns]
+        stmt = self._stmt(f"INSERT INTO {self._ks}.{table} ({', '.join(names)}) "
+                          f"VALUES ({', '.join('?' for _ in names)})")
+        for row in rows:
+            self._session.execute(stmt, tuple(row[c] for c in names))
+        return len(rows)
 
-    profile = ExecutionProfile(load_balancing_policy=RoundRobinPolicy(), consistency_level=ConsistencyLevel.LOCAL_ONE,
-                               request_timeout=20, row_factory=dict_factory)
-    hosts = list(cfg.cassandra_hosts)
-    kwargs = dict(contact_points=hosts, port=cfg.cassandra_port, protocol_version=5,
-                  execution_profiles={EXEC_PROFILE_DEFAULT: profile},
-                  connect_timeout=timeout_s, control_connection_timeout=timeout_s)
-    if len(hosts) == 1:
-        kwargs["address_translator"] = _ToContactPoint(hosts[0])
-    try:
-        return Cluster(**kwargs).connect()
-    except (NoHostAvailable, OSError) as exc:
-        raise StoreUnavailable(f"cannot reach Cassandra at {hosts}:{cfg.cassandra_port}: {exc}") from None
+    def write_windows(self, rows: Iterable[Mapping[str, Any]]) -> int:
+        return self._write(S.TABLE, S.COLUMNS, rows, S.validate_row)
 
+    def write_metrics(self, rows: Iterable[Mapping[str, Any]]) -> int:
+        return self._write(M.METRICS_TABLE, M.METRICS_COLUMNS, rows, M.validate_metrics_row)
 
-def apply_schema(session) -> int:
-    n = 0
-    for path in SCHEMA_FILES:
-        for stmt in split_statements(path.read_text()):
-            session.execute(stmt)
-            n += 1
-    return n
-
-
-def check_schema(session) -> List[str]:
-    actual: Dict[str, Dict[str, str]] = collections.defaultdict(dict)
-    for r in session.execute(COLUMNS_QUERY, (S.KEYSPACE,)):
-        actual[r["table_name"]][r["column_name"]] = r["type"]
-    errors = []
-    for table, cols in EXPECTED_TABLES.items():
-        if table not in actual:
-            errors.append(f"table {S.KEYSPACE}.{table} missing")
-            continue
-        want = dict(cols)
-        for c, t in want.items():
-            if c not in actual[table]:
-                errors.append(f"{table}.{c} missing")
-            elif actual[table][c] != t:
-                errors.append(f"{table}.{c} is {actual[table][c]}, contract says {t}")
-        errors += [f"{table}.{c} not in contract" for c in sorted(set(actual[table]) - set(want))]
-    return errors
-
-
-# ---- writer / reader ---------------------------------------------------------------------------
-def _bind(row: Mapping, columns: Tuple[str, ...]) -> tuple:
-    return tuple(ms_to_dt(row[c]) if c in TIMESTAMP_COLUMNS and row[c] is not None else row[c] for c in columns)
-
-
-class StoreWriter:
-    def __init__(self, session):
-        self.session = session
-
-        def prep(table, cols):
-            return session.prepare(f"INSERT INTO {S.KEYSPACE}.{table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})")
-        self._win = prep(S.TABLE, WINDOW_INSERT_COLUMNS)
-        self._met = prep(M.METRICS_TABLE, METRICS_INSERT_COLUMNS)
-        self._run = prep(M.RUNS_TABLE, RUN_INSERT_COLUMNS)
-
-    def _many(self, stmt, rows, cols):
-        from cassandra.concurrent import execute_concurrent_with_args
-        execute_concurrent_with_args(self.session, stmt, [_bind(r, cols) for r in rows], concurrency=64,
-                                     raise_on_first_error=True)
-
-    def write_windows(self, rows: List[Mapping]) -> None:
-        self._many(self._win, rows, WINDOW_INSERT_COLUMNS)
-
-    def write_metrics(self, rows: List[Mapping]) -> None:
-        self._many(self._met, rows, METRICS_INSERT_COLUMNS)
-
-    def write_run(self, row: Mapping) -> None:
-        self.session.execute(self._run, _bind(row, RUN_INSERT_COLUMNS))
-
-
-class StoreReader:
-    def __init__(self, session):
-        self.session = session
-
-    def recent_windows(self, now_ms: int, seconds: int = S.DRIFT_WINDOW_S, run_id: Optional[str] = None) -> List[dict]:
-        start = now_ms - seconds * 1000
-        rows = []
-        for bucket, hour in partitions_between(start, now_ms):
-            for r in self.session.execute(WINDOWS_QUERY, (bucket, hour, ms_to_dt(start), ms_to_dt(now_ms))):
-                d = row_to_dict(r)
-                if run_id is None or d["run_id"] == run_id:
-                    rows.append(d)
-        return sorted(rows, key=lambda d: (-d["window_end"], d["src_ip"]))
-
-    def drift(self, now_ms: int, seconds: int = S.DRIFT_WINDOW_S, run_id: Optional[str] = None) -> dict:
-        return drift_summary(self.recent_windows(now_ms, seconds, run_id))
-
-    def top_flagged(self, now_ms: int, seconds: int = S.DRIFT_WINDOW_S, n: int = 10, run_id: Optional[str] = None):
-        return aggregate_top(self.recent_windows(now_ms, seconds, run_id), n)
-
-    def metrics(self, run_id: str, limit: int = 60) -> List[dict]:
-        return [row_to_dict(r) for r in self.session.execute(METRICS_QUERY, (run_id, limit))]
-
-    def runs(self, limit: int = 20) -> List[dict]:
-        return [row_to_dict(r) for r in self.session.execute(RUNS_QUERY, (M.RUNS_BUCKET, limit))]
-
-
-def delete_run(session, data: Mapping) -> None:
-    """Remove rows written for a synthetic/test run (windows by full key, metrics by partition, the run row)."""
-    for r in data["windows"]:
-        session.execute(f"DELETE FROM {S.KEYSPACE}.{S.TABLE} WHERE date_bucket = %s AND hour = %s AND window_end = %s "
-                        "AND src_ip = %s", (r["date_bucket"], r["hour"], ms_to_dt(r["window_end"]), r["src_ip"]))
-    if data.get("metrics"):
-        session.execute(f"DELETE FROM {M.KEYSPACE}.{M.METRICS_TABLE} WHERE run_id = %s", (data["metrics"][0]["run_id"],))
-    if data.get("run"):
-        session.execute(f"DELETE FROM {M.KEYSPACE}.{M.RUNS_TABLE} WHERE bucket = %s AND started_at = %s",
-                        (data["run"]["bucket"], ms_to_dt(data["run"]["started_at"])))
+    def write_run(self, row: Mapping[str, Any]) -> int:
+        return self._write(M.RUNS_TABLE, M.RUNS_COLUMNS, [row], M.validate_run_row)

@@ -1,48 +1,44 @@
-# Module 4 (REPLICA) — standard targets (Constitution Art. V)
+# Module 4 — standard targets (Constitution Art. V)
 PY ?= $(shell [ -x ../.venv/bin/python ] && echo ../.venv/bin/python || echo python3)
+# pytest exits 5 when no tests are collected (e.g. integration without the docker marker).
+PYTEST = $(PY) -m pytest -q -p no:cacheprovider
 
-.PHONY: install test contract-test run mock clean integration-test demo bench bench-all analyze
+.PHONY: install test contract-test run mock clean integration-test bench analyze
 
 install:
 	$(PY) -m pip install -q -r requirements.txt
 	$(PY) -m pip install -q -e . --no-deps
 
 test:
-	$(PY) -m pytest tests/unit -q -p no:cacheprovider
+	$(PYTEST) tests/unit || [ $$? -eq 5 ]
 
 contract-test:
-	$(PY) -m pytest tests/contract -q -p no:cacheprovider
+	$(PYTEST) tests/contract || [ $$? -eq 5 ]
 
-# Prepares the store (idempotent, checked against C-04/C-05), then serves the live dashboard on http://localhost:8501.
+integration-test:
+	$(PYTEST) tests/integration -m docker || [ $$? -eq 5 ]
+
+# M4-F01 schema apply + check (idempotent), then the M4-F02 dashboard on the C-06 `dashboard` port.
+DASHBOARD_PORT = 8501
 run:
 	$(PY) -m ids_monitor.schema apply
-	$(PY) -m ids_monitor.schema check
-	$(PY) -m streamlit run src/ids_monitor/dashboard.py --server.port 8501 --server.headless true --browser.gatherUsageStats false
+	$(PY) -m streamlit run src/ids_monitor/dashboard_app.py --server.port $(DASHBOARD_PORT) --server.headless true \
+		--browser.gatherUsageStats false
 
-# Not a standard target: the dashboard on in-memory synthetic data (no platform needed).
-demo:
-	$(PY) -m streamlit run src/ids_monitor/dashboard.py --server.port 8501 --server.headless true --browser.gatherUsageStats false -- --demo
+# M4-F03 benchmark harness: one experiment (EXP=E1|E2|E3|P1|LAT|REC), extra flags in BENCH_ARGS
+# (e.g. BENCH_ARGS="--levels 1 --duration 60" for a smoke, or "--dry-run"). Needs the platform up and M1/M3 installed.
+EXP ?= E1
+bench:
+	$(PY) -m ids_monitor.bench --experiment $(EXP) $(BENCH_ARGS)
 
-# M4 mock: synthetic, contract-valid C-04/C-05 rows ending now (for dashboard work before the Spark job exists).
+# M4-F04: scorecard, F3 table and report figures from the M4-F03 results → $(RESULTS_DIR)/analysis/
+analyze:
+	$(PY) -m ids_monitor.analyze
+
+# M4-F01: contract-valid synthetic windows and metrics for the last 300 s (mock of M3's output).
 mock:
-	$(PY) mocks/synthetic_rows.py --seconds 600 --anomaly-share 0.2
+	$(PY) -m ids_monitor.synthetic $(MOCK_ARGS)
 
 clean:
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 	rm -rf src/*.egg-info .pytest_cache
-
-integration-test:
-	$(PY) -m pytest tests/integration -q -p no:cacheprovider -m docker
-
-# M4-F03 benchmark harness (needs the platform). `make bench EXP=E2`; `make bench EXP=E1 ARGS="--levels 1 --duration 60"`.
-EXP ?= E1
-bench:
-	$(PY) -m ids_monitor.bench --experiment $(EXP) $(ARGS)
-
-# All experiments at 600 s each (about 3 h): E1, E2, LAT, E3, P1, REC. A failed run is recorded and the next experiment still runs.
-bench-all:
-	for e in E1 E2 LAT E3 P1 REC; do $(PY) -m ids_monitor.bench --experiment $$e $(ARGS); done
-
-# M4-F04: scorecard + figures from the newest report per experiment → results/analysis/
-analyze:
-	$(PY) -m ids_monitor.analyze
