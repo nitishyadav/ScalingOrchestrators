@@ -114,9 +114,14 @@ def make_scorer(spark: SparkSession, bundle_path: str):
 
 
 # ---- F04 sink + metrics --------------------------------------------------------------------------
+def _bucket(ts_col: str):
+    """C-04 1.0.0-rc.1: 5-minute UTC bucket of the day (0..287), equal to `ids_contracts.store.partition_key`."""
+    return ((Fn.hour(ts_col) * 3600 + Fn.minute(ts_col) * 60 + Fn.second(ts_col)) / S.BUCKET_S).cast("int")
+
+
 def to_store(scored: DataFrame, run_id: str, bundle_version: str, detected_ms: int) -> DataFrame:
     cols = {
-        "date_bucket": Fn.date_format("window_end_ts", "yyyy-MM-dd"), "hour": Fn.hour("window_end_ts"),
+        "date_bucket": Fn.date_format("window_end_ts", "yyyy-MM-dd"), "bucket": _bucket("window_end_ts"),
         "window_end": Fn.col("window_end_ts"), "src_ip": Fn.col("src_ip"), "window_start": Fn.col("window_start_ts"),
         "total_bytes": Fn.col("total_bytes"), "unique_ports": Fn.col("unique_ports"), "syn_ack_ratio": Fn.col("syn_ack_ratio"),
         "packet_rate": Fn.col("packet_rate"), "event_count": Fn.col("event_count"), "anomaly_score": Fn.col("anomaly_score"),
