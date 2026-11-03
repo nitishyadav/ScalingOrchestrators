@@ -65,7 +65,9 @@ def test_threshold_selection_respects_fpr_constraint(splits):
     sel = tr.select_threshold(model, splits, mb.DEFAULT_RULES)
     assert sel["fpr_constraint_met"] is True and sel["holdout_fpr"] < 0.05
     ok = [c for c in sel["candidates"] if c["holdout_fpr"] < 0.05]
-    assert sel["val_f1"] == max(c["val_f1"] for c in ok)
+    best_recall = max(c["val_recall"] for c in ok)
+    assert sel["val_recall"] == best_recall                       # 1.2.0: recall decides, not F1
+    assert sel["holdout_fpr"] == min(c["holdout_fpr"] for c in ok if c["val_recall"] == best_recall)    # ties: lowest FPR
     assert sel["percentile"] in tr.PERCENTILES
 
 
@@ -107,3 +109,14 @@ def test_report_markdown_has_pass_fail(splits):
     res = tr.train_and_evaluate(splits, seed=42)
     md = tr.report_markdown(tr.report_dict(res, version="1.0.0-replica"))
     assert "F1 precision" in md and "F2 benign FPR" in md and ("PASS" in md or "FAIL" in md)
+
+
+def test_selection_is_not_driven_by_validation_f1(splits):
+    """F1 on a benign-dominated validation set rises with every stricter percentile; the selection must not just take the strictest."""
+    model = tr.fit_model(splits["train"][list(F.FEATURE_ORDER)], seed=42)
+    sel = tr.select_threshold(model, splits, mb.DEFAULT_RULES)
+    ok = [c for c in sel["candidates"] if c["holdout_fpr"] < 0.05]
+    f1_pick = max(ok, key=lambda c: (c["val_f1"], -c["holdout_fpr"]))
+    recall_pick = max(ok, key=lambda c: (c["val_recall"], -c["holdout_fpr"]))
+    assert sel["percentile"] == recall_pick["percentile"]
+    assert sel["val_recall"] >= f1_pick["val_recall"]

@@ -75,6 +75,7 @@ def test_up_runs_steps_in_order_and_saves_state(capsys, tmp_path):
                          ("spawn", "job"), ("spawn", "producer"), ("spawn", "dashboard")]
     assert ops.cmd["producer"][-4:] == ["--attack-mode", "mixed", "--attack-share", "0.2"]
     assert ops.cmd["dashboard"][-2:] == ["--run-id", "DEV-demo-t"]
+    assert "src/ids_monitor/dashboard_app.py" in ops.cmd["dashboard"]      # dashboard.py only defines main(): launching it serves a blank page
     out = out_json(capsys)
     assert out["run_id"] == "DEV-demo-t" and out["bundle_version"] == "1.1.0-replica"
     state = json.loads((tmp_path / "demo.json").read_text())

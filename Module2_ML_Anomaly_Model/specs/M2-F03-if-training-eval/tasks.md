@@ -8,4 +8,6 @@
 - [x] **M2-T075** Install `1.0.0-replica` at `runtime/bundle/current`. Live run `DEV-live-trained` · Done: 2026-10-22
 - [x] **M2-T076** Diagnostics tests first: `tests/unit/test_diagnose_ml.py` (separable vs hidden attack, threshold-vs-feature verdict, IF score saturation) · Done: 2026-10-31
 - [x] **M2-T077** `src/ids_model/diagnose_ml.py` (AUC, benign-percentile position, ML-only P/R by percentile, feature shift; report `D15-ml-diagnosis-<date>.{md,json}`). Diagnosis only: no threshold or feature choice uses the test split · Done: 2026-10-31
-- [ ] **M2-T078** Run on the real replay dataset (needs `runtime/data/replay/`) and record the reading per category
+- [x] **M2-T078** Run on the real replay dataset and record the reading per category: threshold problem for DDoS and PortScan (AUC 0.991, recall 0 at p99.9) · Done: 2026-11-03
+- [x] **M2-T079** Tests first, then `select_threshold` by validation recall (ties: lowest hold-out FPR); `VERSION` 1.2.0-replica; spec FR-022; M2-ADR-001 · Done: 2026-11-03
+- [x] **M2-T080** Real-data run: percentile 99, threshold 0.6531; ML-only test recall 1.000; hybrid precision 0.023 (report `F03-training-2026-11-03.md`) · Done: 2026-11-03

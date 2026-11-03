@@ -23,7 +23,7 @@ A window is positive iff `label_attack` (C-02 eval-only, ADR-007).
 | ID | Requirement |
 |---|---|
 | M2-FR-021 | Model = Pipeline(`log1p` → StandardScaler → IsolationForest(n_estimators=200, random_state=42)) on the C-02 `FEATURE_ORDER` features. Input stays raw C-02 features (C-03 unchanged) |
-| M2-FR-022 | Threshold candidates = percentiles {90, 95, 97, 98, 99, 99.5, 99.9} of the train anomaly scores. Choose the one maximising **validation** hybrid F1 subject to benign hold-out hybrid FPR < 5 %. If none qualifies, use the lowest-FPR candidate and flag `fpr_constraint_met: false` |
+| M2-FR-022 | Threshold candidates = percentiles {90, 95, 97, 98, 99, 99.5, 99.9} of the train anomaly scores. Among those with benign hold-out hybrid FPR < 5 %, choose the one with the highest **validation** hybrid recall, ties broken by the lowest hold-out FPR (1.2.0, ADR-M2-001: validation F1 is reported but no longer decides, because it collapsed to the strictest candidate and discarded the ML signal). If none qualifies, use the lowest-FPR candidate and flag `fpr_constraint_met: false` |
 | M2-FR-023 | Report on test: precision, recall, F1 and FPR for **ml-only, rule-only, hybrid**; recall per attack category (`label_type`); confusion counts; F2 FPR on the benign hold-out; window counts per split |
 | M2-FR-024 | Write a C-03 bundle `runtime/bundle/1.0.0-replica/` (manifest `metrics` = hybrid test precision/recall + hold-out FPR, `test_files`), optionally installed to `MODEL_BUNDLE_PATH`, plus a report `docs/measurements/F03-training-<date>.{json,md}`. Deterministic for a given seed |
 | M2-FR-025 | Targets are **reported, not forced**: the report states PASS/FAIL per F1/F2 |
