@@ -156,7 +156,7 @@ def up(ops: Ops, args) -> dict:
         say(f"→ dashboard: port {DASHBOARD_PORT} is already serving (left as is; pick run {run_id} in its sidebar)")
     else:
         say("→ dashboard")
-        pids["dashboard"] = ops.spawn([PY, "-m", "streamlit", "run", "src/ids_monitor/dashboard.py", "--server.port",
+        pids["dashboard"] = ops.spawn([PY, "-m", "streamlit", "run", "src/ids_monitor/dashboard_app.py", "--server.port",
                                        str(DASHBOARD_PORT), "--server.headless", "true", "--browser.gatherUsageStats", "false",
                                        "--", "--run-id", run_id], M4, logs / "dashboard.log")
         dashboard = f"http://localhost:{DASHBOARD_PORT}"

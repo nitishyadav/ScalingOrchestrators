@@ -73,12 +73,13 @@ def wait_for_run_row(s, run_id, timeout=120):
 
 
 def windows_for(s, run_id, start_ms, end_ms):
-    rows, h = [], (start_ms // 3_600_000) * 3_600_000
+    step = S.BUCKET_S * 1000
+    rows, h = [], (start_ms // step) * step
     while h <= end_ms:
-        db, hr = S.partition_key(h)
-        rows += [as_ms_row(r) for r in s.execute("SELECT * FROM ids.window_scores WHERE date_bucket = %s AND hour = %s",
-                                                 (db, hr)) if r["run_id"] == run_id]
-        h += 3_600_000
+        db, bucket = S.partition_key(h)
+        rows += [as_ms_row(r) for r in s.execute("SELECT * FROM ids.window_scores WHERE date_bucket = %s AND bucket = %s",
+                                                 (db, bucket)) if r["run_id"] == run_id]
+        h += step
     return rows
 
 
