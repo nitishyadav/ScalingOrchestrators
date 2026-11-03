@@ -28,7 +28,7 @@ from . import MODULE_DIR
 from .bundle import DEFAULT_RULES, BundleError, install, rule_flags, write_bundle
 from .features import DEFAULT_T0_MS, R_REF, features_from_replay
 
-VERSION = "1.1.0-replica"                      # 1.1.0: C-02 0.2.0 model inputs (D-14 V3)
+VERSION = "1.2.0-replica"                      # 1.1.0: C-02 0.2.0 model inputs (D-14 V3); 1.2.0: recall-based threshold selection
 SEED = 42
 N_ESTIMATORS = 200
 PERCENTILES = (90, 95, 97, 98, 99, 99.5, 99.9)
@@ -96,7 +96,9 @@ def select_threshold(model, splits: Mapping, rules: Mapping, features: Sequence[
         candidates.append({"percentile": p, "threshold": thr, "val_f1": vm["f1"], "val_precision": vm["precision"],
                            "val_recall": vm["recall"], "holdout_fpr": hm["fpr"]})
     ok = [c for c in candidates if c["holdout_fpr"] < FPR_LIMIT]
-    best = (max(ok, key=lambda c: (c["val_f1"], -c["holdout_fpr"])) if ok
+    # 1.2.0: validation F1 is dominated by benign volume (119k windows, 37 attacks) and always rises with a stricter threshold, so it
+    # picked the strictest percentile and threw the ML signal away (D15 diagnosis). Choose by validation recall; ties → lowest FPR.
+    best = (max(ok, key=lambda c: (c["val_recall"], -c["holdout_fpr"])) if ok
             else min(candidates, key=lambda c: (c["holdout_fpr"], -c["val_f1"])))
     return {**best, "fpr_constraint_met": bool(ok), "candidates": candidates}
 
@@ -130,7 +132,7 @@ def write_trained_bundle(res: Mapping, out_dir: Path, version: str = VERSION) ->
                 "seed": res["seed"], "n_estimators": N_ESTIMATORS, "contamination": "auto", "R_ref": R_REF,
                 "pipeline": "log1p → StandardScaler → IsolationForest", "train_windows": res["counts"]["train"],
                 "threshold_rule": f"percentile {sel['percentile']} of train anomaly_score; chosen on validation (Tue–Thu) "
-                                  f"hybrid F1 subject to benign hold-out FPR < {FPR_LIMIT:.0%}",
+                                  f"hybrid recall (ties: lowest FPR) subject to benign hold-out FPR < {FPR_LIMIT:.0%}",
                 "fpr_constraint_met": sel["fpr_constraint_met"]}
     metrics = {"precision": res["test"]["hybrid"]["precision"], "recall": res["test"]["hybrid"]["recall"],
                "fpr": res["holdout"]["hybrid"]["fpr"], "test_files": list(TEST_FILES)}
