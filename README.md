@@ -33,13 +33,16 @@ Original proposal: [project_proposal.html](project_proposal.html).
 
 ## 2. Quick start: clone and run
 
+> **Full setup instructions** (prerequisites, Docker configuration, model training, troubleshooting) are in
+> **[SETUP_AND_RUN.md](SETUP_AND_RUN.md)**. Read that file for a complete step-by-step guide on a new machine.
+
 ### 2.1 Prerequisites
 
 | Tool | Version | Why |
 |---|---|---|
 | Git | any recent | clone |
 | Python | **3.11** (host) | tests, producer, model training, dashboard |
-| Docker engine | Docker Desktop, or Colima 0.10.3 with Compose v2 (6 CPU, 10 GB) | Kafka, Spark, Cassandra |
+| Docker engine | Colima 0.10.3+ with Compose v2 (6 CPU, 12 GB) | Kafka, Spark, Cassandra |
 | Java | **17** (Homebrew `openjdk@17` or Temurin) | host PySpark tests only |
 
 Pinned versions are in [contracts/versions.md](contracts/versions.md). Use them exactly; the model is pickled, so
@@ -67,17 +70,20 @@ done
 (cd contracts/python && python -m pytest -q)
 ```
 
-### 2.3 Start the platform and run the pipeline
+### 2.3 Train the model and run the pipeline
 
 ```bash
 cp integration/.env.example integration/.env    # git-ignored; adjust locally if needed
-cd Module1_Data_Ingestion_Platform && make run  # Kafka, Spark (1 master, 2 workers), Cassandra
-cd ../Module4_Storage_Dashboard_Benchmarking && make run    # schema, then the dashboard on http://localhost:8501
+
+# Train the real Isolation Forest (needs CIC-IDS2017 CSVs in runtime/data/raw/TrafficLabelling/)
+cd Module2_ML_Anomaly_Model && python -m ids_model.train --install && cd ..
+
+# Start the full pipeline
+python integration/demo.py up --rate 500 --executors 1
 ```
 
 The dataset (CIC-IDS2017 "TrafficLabelling" CSVs, about 2 GB) is **not in git**. Download it from the
-[CIC site](https://www.unb.ca/cic/datasets/ids-2017.html), put the CSVs in `runtime/data/raw/TrafficLabelling/`, then
-run `python -m ids_ingest.prepare` in Module 1. It checks SHA-256 hashes against C-01 and writes the replay dataset.
+[CIC site](https://www.unb.ca/cic/datasets/ids-2017.html) and put the CSVs in `runtime/data/raw/TrafficLabelling/`.
 
 Until the dataset is ready you can work from the mocks: every module ships stand-ins (`mocks/`), and
 `make mock` in Modules 2–4 produces synthetic data that matches the contracts.

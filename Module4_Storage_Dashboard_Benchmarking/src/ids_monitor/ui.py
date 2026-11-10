@@ -105,14 +105,15 @@ def _e(value: object) -> str:
 
 
 def hms(ms: int) -> str:
-    return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc).strftime("%H:%M:%S")
+    return dt.datetime.fromtimestamp(ms / 1000).astimezone().strftime("%H:%M:%S")
 
 
 def header_html(v: View) -> str:
     live = v.anchor_mode == "now"
     badge = (f'<span class="ids-badge live" role="status"><span class="ids-dot"></span>LIVE</span>' if live else
              f'<span class="ids-badge ended" role="status"><span class="ids-dot"></span>ENDED</span>')
-    when = f"Updated {hms(v.anchor_ms)} UTC" if live else f"As of run end · {hms(v.anchor_ms)} UTC"
+    tz_name = dt.datetime.now().astimezone().tzname() or "local"
+    when = f"Updated {hms(v.anchor_ms)} {tz_name}" if live else f"As of run end · {hms(v.anchor_ms)} {tz_name}"
     invalid = f'<span class="ids-pill">{v.invalid:,} invalid rows skipped</span>' if v.invalid else ""
     return ('<div class="ids-header"><div class="ids-brand">' + SHIELD +
             '<div><div class="ids-title">IDS Live Monitor</div>'
