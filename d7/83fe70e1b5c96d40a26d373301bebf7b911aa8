@@ -1,0 +1,25 @@
+SETUP_AND_RUN.md
+  s_219bae2ba9497f::t_21f2f4992a880e 1-89,113-180
+  s_219bae2ba9497f::t_81eaf67d0ab28c 90-112
+README.md
+  s_219bae2ba9497f::t_6d095ad4e54729 36-38,45,73,77-82,86
+Module4_Storage_Dashboard_Benchmarking/src/ids_monitor/ui.py
+  s_219bae2ba9497f::t_9c2b70616c100c 108
+  s_219bae2ba9497f::t_0362cce5a60385 115-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d783fe70e1b5c96d40a26d373301bebf7b911aa8",
+  "prompts": {},
+  "sessions": {
+    "s_219bae2ba9497f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f08b4f0d-2c53-41f6-a1bb-70a2f42045b6",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "kupriyan <kupriyan@cisco.com>"
+    }
+  }
+}
